@@ -1,6 +1,6 @@
 import { Field } from 'o1js';
-import { Customer } from '../src/types/customer.js'
-import { CUSTOMER_SHARES_TOTAL, CustomerData } from '../src/data/data_customers.js';
+import { Customer, CUSTOMER_SHARES_TOTAL } from '../src/types/customer.js'
+import { CustomerData } from '../src/data/data_customers.js';
 import { NUM_OF_CUSTOMERS, TREE_HEIGHT, TREE_NUM_OF_LEAFS } from '../src/types/o1js_merkle_tree.js';
 import fs from 'fs/promises';
 import { TEST_PERIOD_FROM_TIMESTAMP, TEST_PERIOD_TO_TIMESTAMP } from '../src/data/data_timestamps.js';
@@ -16,7 +16,7 @@ let customers = JSON.parse(customerRecordsRaw) as Customer[];
 let sumOfShares = Field(0);
 for (let i = 0; i < NUM_OF_CUSTOMERS; i++) {
     let customerJson = Customer.fromJSON(customers[i]);
-    sumOfShares = sumOfShares.add(customerJson.customerShare);
+    sumOfShares = sumOfShares.add(customerJson.customerShares);
 }
 
 sumOfShares.assertEquals(Field(CUSTOMER_SHARES_TOTAL));
