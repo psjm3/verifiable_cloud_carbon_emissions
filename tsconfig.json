@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "NodeNext",
+    "outDir": "./generated",
+    "rootDir": ".",
+    "allowJs": true,
+    "sourceMap": true,
+    "moduleResolution": "NodeNext",
+    "esModuleInterop": true,
+    "declaration": false,
+    "experimentalDecorators": true, // needed for decorators
+    "emitDecoratorMetadata": true, // needed for decorators
+    "useDefineForClassFields": false, // ensure correct behaviour of class fields with decorators
+    "strictPropertyInitialization": false, // to enable generic constructors, e.g. on CircuitValue
+  },
+  "include": ["./src", "./test"],
+  "exclude": ["./node_modules"]
+}
