@@ -12,6 +12,8 @@ The src directory contains the main code for the three circuits. It is further d
 - zkPrograms: Circuits for each proof. They are written and structured using o1js' ZkProgram API and recursion proof framework.
 - verifier_main.ts: Not a directory, this is the main program a verifier (a customer) runs to verify the generated carbon emisisons proof.
 
+The python directory contains a Jupyter notebook that has python code to generate graphs using the time measurements from running the customer shares circuit.
+
 ## Runtime set up
 ### nvm
 If your environment does not have [nvm](https://github.com/nvm-sh/nvm) already installed, first install nvm (current latest version is v0.40.3, which can be replaced with a more up-to-date version)
