@@ -96,7 +96,9 @@ for (let i = 0; i < NUM_OF_VERIFIER; i++) {
     console.log("Verify emissions proof and signature of tree root hash for customer", customerIds[i].toString());
 
     console.time("verProof");
+    let cpuStart = process.cpuUsage();
     const ok = await verify(proofJson, perCustomerProofVk);
+    console.log("Just the verification cpu time:", process.cpuUsage(cpuStart), "memory:", process.memoryUsage());
     console.timeEnd('verProof');
     console.log('Proof ok?', ok);
     assert(ok);

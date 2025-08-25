@@ -45,10 +45,10 @@ export const customerSharesCircuit = ZkProgram({
                             privateCustomerData[i].invoice.resourcesCharges.mul(subTreeRoot.ratioUpperBound))
                         );
 
-                    // Provable.log("privateCustomerData[",i,"].customerShare:", privateCustomerData[i].customerShare);
-                    // Provable.log("privateCustomerData[",i,"].Invoice.resourcesCharges.mul(subTreeRoot.ratioLowerBound):", privateCustomerData[i].Invoice.resourcesCharges.mul(subTreeRoot.ratioLowerBound));
-                    // Provable.log("privateCustomerData[",i,"].Invoice.resourcesCharges.mul(subTreeRoot.ratioUpperBound):", privateCustomerData[i].Invoice.resourcesCharges.mul(subTreeRoot.ratioUpperBound));
-                    // Provable.log("ratioWithinRange:", ratioWithinRange, "for privateCustomerData[i].customerShare");
+                    // Provable.log("privateCustomerData[",i,"].customerShares:", privateCustomerData[i].customerShares);
+                    // Provable.log("privateCustomerData[",i,"].invoice.resourcesCharges.mul(subTreeRoot.ratioLowerBound):", privateCustomerData[i].invoice.resourcesCharges.mul(subTreeRoot.ratioLowerBound));
+                    // Provable.log("privateCustomerData[",i,"].invoice.resourcesCharges.mul(subTreeRoot.ratioUpperBound):", privateCustomerData[i].invoice.resourcesCharges.mul(subTreeRoot.ratioUpperBound));
+                    // Provable.log("ratioWithinRange:", ratioWithinRange, "for privateCustomerData[i].customerShares");
                     assert(Provable.if(
                         privateCustomerData[i].invoice.resourcesCharges.lessThan(
                             Invoice.resourcesCostsLowerBoundThreshold).and(
@@ -93,7 +93,7 @@ export const customerSharesCircuit = ZkProgram({
 
                 let calcHash = Poseidon.hash([leftProof.publicOutput.hash, rightProof.publicOutput.hash]);
                 let calctotalCustomerShares = leftProof.publicOutput.totalCustomerShares.add(rightProof.publicOutput.totalCustomerShares);
-                let calcResourcesCostsSum = leftProof.publicOutput.totalResourceCharges.add(rightProof.publicOutput.totalResourceCharges);
+                let calcResourceChargesSum = leftProof.publicOutput.totalResourceCharges.add(rightProof.publicOutput.totalResourceCharges);
                 let calctotalOtherCharges = leftProof.publicOutput.totalOtherCharges.add(rightProof.publicOutput.totalOtherCharges);
 
                 publicTreeRoot.hash.assertEquals(
@@ -103,15 +103,15 @@ export const customerSharesCircuit = ZkProgram({
 
                 publicTreeRoot.totalCustomerShares.assertEquals(
                     calctotalCustomerShares,
-                    "Intermediate nodes do not match with their parent's sum on the merkle tree"
+                    "Intermediate nodes do not match with their parent's customer shares sum on the merkle tree"
                 );
                 publicTreeRoot.totalResourceCharges.assertEquals(
-                    calcResourcesCostsSum,
-                    "Intermediate nodes do not match with their parent's sum on the merkle tree"
+                    calcResourceChargesSum,
+                    "Intermediate nodes do not match with their parent's resources charges sum on the merkle tree"
                 );           
                 publicTreeRoot.totalOtherCharges.assertEquals(
                     calctotalOtherCharges,
-                    "Intermediate nodes do not match with their parent's sum on the merkle tree"
+                    "Intermediate nodes do not match with their parent's other charges sum on the merkle tree"
                 );
                 return { publicOutput: publicTreeRoot }
             }
