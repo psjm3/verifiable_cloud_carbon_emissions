@@ -56,15 +56,10 @@ export class SmartMeterManufacturer {
 
     // Serialise the serial number of the meter, secret key, public key and the public key+serial number signature from the manufacturer
     async createSmartMeter() {
-        // Use hashed meter id for the signature
-        // const signedSmartMeterPk: SignedMeterPk = manufacturer.signSmartMeterPublicKey(this.smartMeterPublicKey, this.id);
-
         const props = new SmartMeterProperties({
             id: this.meterId,
             secretKey: this.meterSecretKey,
             publicKey: this.meterPublicKey,
-            // smartMeterSignature: signedSmartMeterPk,
-            // manufacturerId: manufacturer.getId()
         });
 
         await fs.writeFile(

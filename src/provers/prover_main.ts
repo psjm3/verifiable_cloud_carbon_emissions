@@ -1,7 +1,7 @@
 import { promisify } from 'util';
 import { exec } from 'child_process';
 import fs from 'fs';
-import fsSync from 'fs/promises';
+import fsAsync from 'fs/promises';
 import { customerSharesCircuit } from '../zkPrograms/zkprogram_customer_shares.js';
 import { totalEmissionsCircuit } from '../zkPrograms/zkprogram_total_emissions.js';
 import { perCustomerEmissionsCircuit } from '../zkPrograms/zkprogram_per_customer_proof.js';
@@ -19,7 +19,7 @@ async function createArtifactFolders() {
 
     paths.forEach((path) => {
         if (!fs.existsSync(path)) {
-            fsSync.mkdir(
+            fsAsync.mkdir(
                 path, { recursive: true }
             ).catch(err => {
                 console.error('Error creating directory for', path, err);
