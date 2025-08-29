@@ -26,7 +26,7 @@ if (!fs.existsSync(path)) {
     fsAsync.mkdir(
         path, { recursive: true }
     ).catch(err => {
-        log(`ERROR: Prover_per_customer_emissions, Error creating directory for ${path}: ${err}\n`);
+        console.error(`ERROR: Prover_per_customer_emissions, Error creating directory for ${path}: ${err}\n`);
         process.exit(1);
     });
 }
@@ -101,7 +101,7 @@ async function generatePerCustomerEmissionsProofs(
             signedMeterManufacturerPk,
             customerRecords[i]
         );
-        log(`Prover_per_customer_emissions, one_per_customer_emissions_proof, time, ${performance.now() - oneCustomerProofTimeStart}, cpuUsage, ${process.cpuUsage()}, memUsage, ${process.memoryUsage().rss}\n`);
+        log(`Prover_per_customer_emissions, one_per_customer_emissions_proof, time, ${performance.now() - oneCustomerProofTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
 
         fsAsync.writeFile("emissions_proof_" + publicCustomerRecord.customerInvoice.customerId + ".json", JSON.stringify(emissionsProof.toJSON())).catch(
             err => {

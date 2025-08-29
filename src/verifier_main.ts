@@ -37,7 +37,7 @@ if (!fs.existsSync(path)) {
     fsAsync.mkdir(
         path, { recursive: true }
     ).catch(err => {
-        log(`ERROR: Verifier_main, Error creating directory for ${path}: ${err}\n`);
+        console.error(`ERROR: Verifier_main, Error creating directory for ${path}: ${err}\n`);
         process.exit(1);
     });
 }

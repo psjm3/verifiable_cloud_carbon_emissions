@@ -19,7 +19,7 @@ if (!fs.existsSync(path)) {
     fsAsync.mkdir(
         path, { recursive: true }
     ).catch(err => {
-        log(`ERROR: Proof_workers_customer_shares_step, Error creating directory for ${path}: ${err}\n`);
+        console.error(`ERROR: Proof_workers_customer_shares_step, Error creating directory for ${path}: ${err}\n`);
         process.exit(1);
     });
 }

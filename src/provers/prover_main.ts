@@ -28,7 +28,7 @@ async function createArtifactFolders() {
             fsAsync.mkdir(
                 path, { recursive: true }
             ).catch(err => {
-                log(`ERROR: Prover_main, Error creating directory for ${path}: ${err}`);
+                console.error(`ERROR: Prover_main, Error creating directory for ${path}: ${err}`);
                 process.exit(1);
             });
         }

@@ -56,6 +56,8 @@ Before running any of the provers, review the following constants first:
 
 - The number of verifier, `NUM_OF_VERIFIER`, is defined in `src/types/customer.ts'. This determines how many per-customer emissions proofs are generated and how many are verified by the verifier.
 
+Also note that the output (e.g. the time measurements) are all stored in the directory generated_logs, one file per prover_* and per proof_workers_*, and one for the verifier_main. These output files are opened for append only, that means that if you run the same program more than once, the results from both runs will be stored on the same files. To avoid confusion you might want to consider saving the generated_logs/* files somewhere else after each run and empty the generated_logs directory before a fresh run.
+
 ```shell
 npm exec tsx src/provers/prover_main.ts
 ```
