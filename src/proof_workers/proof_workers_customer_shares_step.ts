@@ -1,15 +1,27 @@
 import cluster from "cluster";
-import { NodeContent } from "../types/o1js_merkle_tree.js";
-import { verify } from "o1js";
+import fs from 'fs';
+import fsAsync from 'fs/promises';
 
-import fs from 'fs/promises';
+import { NodeContent } from "../types/merkle_tree.js";
+import { verify } from "o1js";
 import { customerSharesCircuit } from "../zkPrograms/zkprogram_customer_shares.js";
+import { debugLog, log, logStreamStart, logStreamStop } from "../utils/util.js";
 
 function convertJsonToProof<
     JsonProof,
     SerialisedProof extends { fromJSON(jsonProof: JsonProof): Promise<JsonProof> }
 >(SerialisedProof: SerialisedProof, jsonProof: JsonProof) {
     return SerialisedProof.fromJSON(jsonProof);
+}
+
+const path = './generated_logs';
+if (!fs.existsSync(path)) {
+    fsAsync.mkdir(
+        path, { recursive: true }
+    ).catch(err => {
+        log(`ERROR: Proof_workers_customer_shares_step, Error creating directory for ${path}: ${err}\n`);
+        process.exit(1);
+    });
 }
 
 // For 1st rec proof, number of proofs input = number of base proofs, number of proofs output = number of proofs input / BATCH_NUM_OF_CUSTOMERS
@@ -25,9 +37,11 @@ const numOfWorkers = parseInt(process.argv[2]);
 let startNodeIndex = parseInt(process.argv[3]);
 const subtreeRootLevel = parseInt(process.argv[4]);
 
+const logFile = path + '/proof_workers_customer_shares_step.out';
+logStreamStart(logFile);
+
 if (cluster.isPrimary) {
-    console.log('Primary', process.pid, 'is running');
-    // console.log("Got command line parameters:", process.argv[2], process.argv[3], process.argv[4])
+    log(`Proof_workers_customer_shares_step, primary_process_${process.pid}_is_running...\n`);
 
     for (let i = 0; i < numOfWorkers; i++) {
         cluster.fork({ "subtreeRootLevel": subtreeRootLevel, "startNodeIndex": startNodeIndex });
@@ -36,44 +50,39 @@ if (cluster.isPrimary) {
 
     cluster.on('exit', (worker, code, signal) => {
         if (signal) {
-            console.log('worker', worker.process.pid, 'was killed by signal', signal);
+            log(`ERROR: Proof_workers_customer_shares_step, worker ${worker.process.pid} was killed by signal ${signal}\n`);
         } else if (code != 0) {
-            console.log('worker', worker.process.pid, 'exited with error code', code);
+            log(`ERROR: Proof_workers_customer_shares_step, worker ${worker.process.pid} exited with error code ${code}\n`);
         } else {
-            console.log('worker', worker.process.pid, 'exited');
+            debugLog(`Proof_workers_customer_shares_step, worker ${worker.process.pid} exited\n`);
         }
     });
 } else {
+    const proofWorkersTimeStart = performance.now();
     let inputNodeIndex = parseInt(process.env.startNodeIndex)
-
-    console.log(
-        'Worker', process.pid,
-        "level to prove:", parseInt(process.env.subtreeRootLevel),
-        'inputNodeIndex', inputNodeIndex
-    );
+    
+    debugLog(`Proof_workers_customer_shares_step, worker ${process.pid} started with level ${parseInt(process.env.subtreeRootLevel)} and inputNodeIndex ${inputNodeIndex}\n`);
 
     /***** Customer Shares Base (Leaf Nodes) Proofs *****/
-    // console.log("Compiling Customer Shares Circuit...");
-    console.time("compileCustomerSharesProof");
+    const compilationTimeStart = performance.now();
     const customerTreeCircuitVk = (await customerSharesCircuit.compile()).verificationKey;
-    console.timeEnd("compileCustomerSharesProof")
+    log(`Proof_workers_customer_shares_step, customer_shares_circuit_compilation, time, ${performance.now() - compilationTimeStart}\n`);
 
     let subtreeRootLevel = parseInt(process.env.subtreeRootLevel)
     let parentOfSubtreeLevel = subtreeRootLevel + 1;
 
-    let leftSerialisedProofRaw = await fs.readFile("./generated_proofs/subtree_proof_" + subtreeRootLevel + "_" + inputNodeIndex + ".json", 'utf8');
+    let leftSerialisedProofRaw = await fsAsync.readFile("./generated_proofs/subtree_proof_" + subtreeRootLevel + "_" + inputNodeIndex + ".json", 'utf8');
     let leftSerialisedProof = await convertJsonToProof(customerSharesCircuit.Proof, JSON.parse(leftSerialisedProofRaw));
 
-    let rightSerialisedProofRaw = await fs.readFile("./generated_proofs/subtree_proof_" + subtreeRootLevel + "_" + (inputNodeIndex + 1) + ".json", 'utf8');
+    let rightSerialisedProofRaw = await fsAsync.readFile("./generated_proofs/subtree_proof_" + subtreeRootLevel + "_" + (inputNodeIndex + 1) + ".json", 'utf8');
     let rightSerialisedProof = await convertJsonToProof(customerSharesCircuit.Proof, JSON.parse(rightSerialisedProofRaw));
 
     let parentOfSubtreeIdx = BigInt(Math.floor(inputNodeIndex / 2));
-    // console.log("subtree root level", parentOfSubtreeLevel, "subtree root idx:", parentOfSubtreeIdx);
-    let subtreeRoot = await fs.readFile("./generated_proofs/subtree_root_" + parentOfSubtreeLevel + "_" + parentOfSubtreeIdx + ".json", 'utf8');
+    let subtreeRoot = await fsAsync.readFile("./generated_proofs/subtree_root_" + parentOfSubtreeLevel + "_" + parentOfSubtreeIdx + ".json", 'utf8');
     let subtreeRootAsNode = JSON.parse(subtreeRoot) as NodeContent
 
-    console.time("Generate one REC proof");
-    const { proof: stepOneProof } = await customerSharesCircuit.stepOneSumOfSharesProof(
+    const stepProofTimeStart = performance.now();
+    const { proof: stepOneProof } = await customerSharesCircuit.stepSumOfSharesProof(
         new NodeContent({ 
             hash: subtreeRootAsNode.hash, 
             totalCustomerShares: subtreeRootAsNode.totalCustomerShares,
@@ -85,23 +94,20 @@ if (cluster.isPrimary) {
         leftSerialisedProof,
         rightSerialisedProof
     );
-    console.timeEnd("Generate one REC proof");
-
-    console.log(
-        "Subtree from worker", process.pid, 
-        "has hash:", stepOneProof.publicOutput.hash.toString(), 
-        "consumption shares sum:", stepOneProof.publicOutput.totalCustomerShares.toString());
+    log(`Proof_workers_customer_shares_step, one_step_proof, time, ${performance.now() - stepProofTimeStart}\n`);
 
     // sanity check that the generated proof can be verified before writing to disc.
-    const validProof = await verify(stepOneProof, customerTreeCircuitVk);
-    //console.log('Node at level', parentOfSubtreeLevel, 'and index', parentOfSubtreeIdx, 'checked out?', validProof);
-
-    await fs.writeFile(
+    const validStepProof = await verify(stepOneProof, customerTreeCircuitVk);
+    debugLog(`Proof_workers_customer_shares_step, step node at level ${parseInt(process.env.subtreeRootLevel)} and index ${inputNodeIndex} checked out? ${validStepProof}\n`);
+    
+    await fsAsync.writeFile(
         "./generated_proofs/subtree_proof_" + parentOfSubtreeLevel + "_" + parentOfSubtreeIdx + ".json", JSON.stringify(stepOneProof.toJSON())
     ).then(() => {
-        console.log("Customer Shares Rec Worker", process.pid, "CPU usage:", process.cpuUsage());
+        log(`Proof_workers_customer_shares_step, Ends, worker_pid, ${process.pid}, level, ${parseInt(process.env.subtreeRootLevel)}, inputNodeIndex ${inputNodeIndex}, time, ${performance.now() - proofWorkersTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
+        logStreamStop(path);
     }).catch(err => {
-        console.error('Error writing file:', err);
+        log(`ERROR: Proof_workers_customer_shares_step, error writing to ./generated_proofs/subtree_proof_${parentOfSubtreeLevel}_${parentOfSubtreeIdx}.json: ${err}\n`);
+        logStreamStop(path);
         process.exit(1);
     });
     process.exit(0);

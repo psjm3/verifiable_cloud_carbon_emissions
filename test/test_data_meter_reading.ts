@@ -9,7 +9,7 @@ import { SmartMeterData } from "../src/data/data_meter_reading.js";
 import { SignedIntensityFactor } from "../src/types/carbon_intensity_factor.js";
 import { SignedMeterReading } from "../src/types/meter_readings.js";
 import { TEST_PERIOD_FROM_TIMESTAMP, TEST_PERIOD_TO_TIMESTAMP } from "../src/data/data_timestamps.js";
-import { log, logStreamStart } from '../src/utils/util.js';
+import { log, logStreamStart, logStreamStop } from '../src/utils/util.js';
 
 console.time("OVERALL");
 const paths = [
@@ -76,3 +76,4 @@ log(`
 Time taken to verify meter readings signatures: ${performance.now() - verifyMeterReadingSigTimeStart}ms`);
 
 console.timeEnd("OVERALL");
+logStreamStop("./test_output/test_data_meter_readings.out");

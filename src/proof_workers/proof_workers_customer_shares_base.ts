@@ -1,22 +1,36 @@
 import cluster from "cluster";
-import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums } from "../types/o1js_merkle_tree.js";
+import fs from 'fs';
+import fsAsync from 'fs/promises';
+
+import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums } from "../types/merkle_tree.js";
 import { verify } from "o1js";
-import fs from 'fs/promises';
 import { customerSharesCircuit } from "../zkPrograms/zkprogram_customer_shares.js";
 import { CustomerData } from "../data/data_customers.js";
 import { Customer } from "../types/customer.js";
+import { debugLog, log, logStreamStart, logStreamStop } from "../utils/util.js";
+
+const path = './generated_logs';
+if (!fs.existsSync(path)) {
+    fsAsync.mkdir(
+        path, { recursive: true }
+    ).catch(err => {
+        log(`ERROR: Proof_workers_customer_shares_base, Error creating directory for ${path}: ${err}\n`);
+        process.exit(1);
+    });
+}
+
+let startIdx = parseInt(process.argv[2]);
+let numOfWorkers = parseInt(process.argv[3]);
+
+const logFile = path + '/proof_workers_customer_shares_base.out';
+logStreamStart(logFile);
 
 const customerDataObj = new CustomerData();
-let customerRecordsRaw = await fs.readFile('./customer_records/customer.json', 'utf8');
+let customerRecordsRaw = await fsAsync.readFile('./customer_records/customer.json', 'utf8');
 let customerRecords = JSON.parse(customerRecordsRaw) as Customer[];
 
 if (cluster.isPrimary) {
-    console.log('Primary', process.pid, 'is running');
-
-    let startIdx = parseInt(process.argv[2]);
-    let numOfWorkers = parseInt(process.argv[3]);
-
-    console.log("Starting workers with startIdx:", startIdx, "numOfWorkers:", numOfWorkers);
+    log(`Proof_workers_customer_shares_base, primary_process_${process.pid}_is_running...\n`);
 
     for (let i = 0; i < numOfWorkers; i++) {
         cluster.fork({ "startIdx": startIdx });
@@ -25,53 +39,52 @@ if (cluster.isPrimary) {
 
     cluster.on('exit', (worker, code, signal) => {
         if (signal) {
-            console.log('worker', worker.process.pid, 'was killed by signal', signal);
+            log(`ERROR: Proof_workers_customer_shares_base, worker ${worker.process.pid} was killed by signal ${signal}\n`);
         } else if (code != 0) {
-            console.log('worker', worker.process.pid, 'exited with error code', code);
+            log(`ERROR: Proof_workers_customer_shares_base, worker ${worker.process.pid} exited with error code ${code}\n`);
         } else {
-            console.log('worker', worker.process.pid, 'exited');
+            debugLog(`Proof_workers_customer_shares_base, worker ${worker.process.pid} exited\n`);
         }
     });
 } else {
+    const proofWorkersTimeStart = performance.now();
+
     let batchIdx = parseInt(process.env.startIdx)
     const recordsInSubTree: Customer[] = customerRecords.slice(batchIdx, batchIdx + BATCH_NUM_OF_CUSTOMERS);
     const subTree: MerkleTreeWithSums = customerDataObj.generateBatchedSubTree(recordsInSubTree);
-
-    console.log(
-        'Worker', process.pid, 
-        "batchIdx: ", batchIdx,
-        "tree root hash:", subTree.getRoot().hash.toString(), "consumption shares sum:", subTree.getRoot().totalCustomerShares.toString());
+    
+    debugLog(`Proof_workers_customer_shares_base, worker ${process.pid} started with batchIdx ${batchIdx}\n`);
 
     /***** Customer Shares Base (Leaf Nodes) Proofs *****/
-    console.log("Compiling Customer Shares Circuit...");
-    console.time("compileCustomerSharesProof");
+    const compilationTimeStart = performance.now();
     const customerTreeCircuitVk = (await customerSharesCircuit.compile()).verificationKey;
-    console.timeEnd("compileCustomerSharesProof")
+    log(`Proof_workers_customer_shares_base, customer_shares_circuit_compilation, time, ${performance.now() - compilationTimeStart}\n`);
 
     let subsetToProve = customerRecords.slice(batchIdx, batchIdx + BATCH_NUM_OF_CUSTOMERS)
-    //console.log("How many records to pass to the base proof?", subsetToProve.length);
     let subtreeRootLevel = Math.ceil(Math.log2(BATCH_NUM_OF_CUSTOMERS));
-    // console.log('pid:', process.pid, 'subtreeRootLevel:', subtreeRootLevel);
     let subtreeRootIdx = BigInt(Math.floor(batchIdx / (2 ** subtreeRootLevel)));
-    // console.log('pid', process.pid, 'subtreeRootIdx:', subtreeRootIdx);
+
+    /***** BASE CIRCUIT *****/
+    const baseProofTimeStart = performance.now();
     const { proof: baseProof } = await customerSharesCircuit.baseSumOfSharesProof(
         subTree.getRoot(),
         subsetToProve
     );
-    // console.log("Subtree from worker", process.pid, "has hash:", baseProof.publicOutput.hash.toString(), "consumption shares sum:", baseProof.publicOutput.totalCustomerShares.toString());
+    log(`Proof_workers_customer_shares_base, one_base_proof, time, ${performance.now() - baseProofTimeStart}\n`);
 
     // sanity check that the generated proof can be verified before writing to disc.
     const validBaseProof = await verify(baseProof, customerTreeCircuitVk);
-    console.log('BASE customer', subtreeRootIdx, 'checked out?', validBaseProof);
+    debugLog(`Proof_workers_customer_shares_base, base customer ${subtreeRootIdx} checked out? ${validBaseProof}\n`);
     
-    fs.writeFile(
+    fsAsync.writeFile(
         "./generated_proofs/subtree_proof_" + subtreeRootLevel + "_" + subtreeRootIdx + ".json", JSON.stringify(baseProof.toJSON())
     ).then(() => {
-        console.log("Customer Shares Base Worker", process.pid, "CPU usage:", process.cpuUsage());
+        log(`Proof_workers_customer_shares_base, Ends, worker_pid, ${process.pid}, start_idx, ${batchIdx}, time, ${performance.now() - proofWorkersTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
+        logStreamStop(path);
         process.exit(0);
     }).catch(err => {
-        console.error('Error writing file:', err);
+        log(`ERROR: Proof_workers_customer_shares_base, error writing to ./generated_proofs/subtree_proof_${subtreeRootLevel}_${subtreeRootIdx}.json: ${err}\n`);
+        logStreamStop(path);
         process.exit(1);
     });
-
 }

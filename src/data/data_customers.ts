@@ -4,9 +4,10 @@ import * as crypto from "crypto";
 import fs from 'fs';
 import fsSync from 'fs/promises';
 import { Field } from "o1js";
-import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums, NodeContent, NUM_OF_CUSTOMERS, TREE_HEIGHT, TREE_NUM_OF_LEAFS } from "../types/o1js_merkle_tree.js";
+import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums, NodeContent, NUM_OF_CUSTOMERS, TREE_HEIGHT, TREE_NUM_OF_LEAFS } from "../types/merkle_tree.js";
 import { Customer, CUSTOMER_SHARES_TOTAL } from "../types/customer.js";
 import { Invoice } from "../types/invoice.js";
+import { debugLog, log } from "../utils/util.js";
 
 export class CustomerData {
     // A convenient function to randomly create consumption percent figures for a set number of customers.
@@ -22,14 +23,14 @@ export class CustomerData {
             await fsSync.mkdir(
                 path, { recursive: true }
             ).catch(err => {
-                console.error('Error creating directory for', path, err);
+                log(`ERROR: data_customer, error creating directory for ${path}: ${err}`);
                 process.exit(1);
             });
         }
         await fsSync.writeFile(
             "./customer_records/customer.json", "["
         ).catch(err => {
-            console.error('Error writing file:', err);
+            log(`ERROR: data_customer, error writing to ./customer_records/customer.json: ${err}\n`);
             process.exit(1);
         });
 
@@ -72,7 +73,7 @@ export class CustomerData {
             resourcesChargesAllocation.push(Field(resourcesCharges));
         }
 
-        console.log('Sum of normalised customer shares:', sumOfAllocatedShares);
+        debugLog(`data_customer, Sum of normalised customer shares: ${sumOfAllocatedShares}`);
 
         // Due to rounding discrepencies, the sum is unlikely to be exactly the same as the target total,
         // so we are alter the last generated share to make the total.
@@ -122,7 +123,7 @@ export class CustomerData {
             await fsSync.appendFile(
                 "./customer_records/customer.json", custRecord
             ).catch(err => {
-                console.error('Error writing file:', err);
+                log(`ERROR: data_customer, error appending to ./customer_records/customer.json: ${err}\n`);
                 process.exit(1);
             });
         }
@@ -130,14 +131,14 @@ export class CustomerData {
         await fsSync.appendFile(
             "./customer_records/customer.json", "]"
         ).catch(err => {
-            console.error('Error writing file:', err);
+            log(`ERROR: data_customer, error appending to ./customer_records/customer.json: ${err}\n`);
             process.exit(1);
         });
 
         return customer;
     }
 
-    async generateCustomerEmisisons(totalEmissions: Field, customers: Customer[]): Promise<Field[]> {
+    async generateCustomerEmissions(totalEmissions: Field, customers: Customer[]): Promise<Field[]> {
         let customerEmissionsAllocation = [];
         let sumOfAllocatedEmissions = Field(0);
 
@@ -152,12 +153,14 @@ export class CustomerData {
         let inflatedTotalEmissions = totalEmissions.toBigInt() * CUSTOMER_SHARES_TOTAL;
         if (sumOfAllocatedEmissions.toBigInt() != inflatedTotalEmissions) {
             let diff = inflatedTotalEmissions - sumOfAllocatedEmissions.toBigInt();
-            console.log("diff:", diff.toString());
-            console.log("last original customer emissions allocation:", customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1].toString());
+            debugLog(`
+                data_customer, diff: ${diff.toString()}
+                last original customer emissions allocation: ${customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1].toString()}`);
+
             customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1] = customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1].add(Field(diff));
-            console.log("last new customer emissions allocation:", customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1].toString());
+            debugLog(`last new customer emissions allocation: ${customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1].toString()}`);
         }
-        console.log('Sum of the customer emissions:', sumOfAllocatedEmissions.toString());
+        debugLog(`Sum of the customer emissions: ${sumOfAllocatedEmissions.toString()}`);
 
         // Construct the set of customer records and serialise them to disc
         let path = './customer_records';
@@ -166,14 +169,14 @@ export class CustomerData {
             await fsSync.mkdir(
                 path, { recursive: true }
             ).catch(err => {
-                console.error('Error creating directory for', path, err);
+                log(`ERROR: data_customer, error creating directory for ${path}: ${err}`);
                 process.exit(1);
             });
         }
         await fsSync.writeFile(
             "./customer_records/customer_emissions.json", "["
         ).catch(err => {
-            console.error('Error writing file:', err);
+            log(`ERROR: data_customer, error writing to ./customer_records/customer_emissions.json: ${err}\n`);
             process.exit(1);
         });
 
@@ -187,7 +190,7 @@ export class CustomerData {
             await fsSync.appendFile(
                 "./customer_records/customer_emissions.json", custEmissions
             ).catch(err => {
-                console.error('Error writing file:', err);
+                log(`ERROR: data_customer, error appending to ./customer_records/customer_emissions.json: ${err}\n`);
                 process.exit(1);
             });
         }
@@ -195,7 +198,7 @@ export class CustomerData {
         await fsSync.appendFile(
             "./customer_records/customer_emissions.json", "]"
         ).catch(err => {
-            console.error('Error writing file:', err);
+            log(`ERROR: data_customer, error appending to ./customer_records/customer_emissions.json: ${err}\n`);
             process.exit(1);
         });
 
@@ -203,10 +206,10 @@ export class CustomerData {
     }
 
     generateCustomerMerkleTree(customerRecords: Customer[]): MerkleTreeWithSums {
+        let merkletreeTimeStart = performance.now();
         let tree = new MerkleTreeWithSums(TREE_HEIGHT);
 
         // The customer records are provided monthly
-        console.time("propagate merkle tree with customer records")
         for (let i = 0; i < TREE_NUM_OF_LEAFS; i++) {
             let newInvoice: Invoice;
             let newCustomerRecord: Customer;
@@ -237,17 +240,16 @@ export class CustomerData {
                 ratioUpperBound: Invoice.acceptableUpperBound
             }));
         }
-        console.timeEnd("propagate merkle tree with customer records")
+        log(`data_customer, create_merkle_tree, time, ${performance.now() - merkletreeTimeStart}\n`)
         return tree;
     }
 
     generateBatchedSubTree(customerRecords: Customer[]): MerkleTreeWithSums {
+        let batchedSubTreeTimeStart = performance.now()
         let tree = new MerkleTreeWithSums(Math.ceil(Math.log2(BATCH_NUM_OF_CUSTOMERS)) + 1);
 
         // The customer records are provided monthly
-        console.time("propagate batched subtree with customer records")
         for (let i = 0; i < BATCH_NUM_OF_CUSTOMERS; i++) {
-            //console.log("Processing leaf ", i);
             let newInvoice: Invoice;
             let newCustomerRecord: Customer;
             //fill customer data with Field(0) for the missing leafs
@@ -277,7 +279,7 @@ export class CustomerData {
                 ratioUpperBound: Invoice.acceptableUpperBound
             }));
         }
-        console.timeEnd("propagate batched subtree with customer records")
+        log(`data_customer, create_one_batch_subtree, time, ${performance.now() - batchedSubTreeTimeStart}\n`);
         return tree;
     }
 }

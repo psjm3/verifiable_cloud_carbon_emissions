@@ -6,7 +6,7 @@ import {
 } from 'o1js';
 import { totalEmissionsCircuit, TotalEmissionsCircuitOutput, TotalEmissionsCircuitPublicInput } from './zkprogram_total_emissions.js';
 import { customerSharesCircuit } from './zkprogram_customer_shares.js';
-import { MerkleWitnessWithSums, NodeContent, TREE_HEIGHT } from '../types/o1js_merkle_tree.js';
+import { MerkleWitnessWithSums, NodeContent, TREE_HEIGHT } from '../types/merkle_tree.js';
 import { PublicCustomerRecord } from '../types/public_customer_record.js';
 import { Customer, CUSTOMER_SHARES_TOTAL } from '../types/customer.js';
 import { SignedPublicKey } from '../types/certificate_authority.js';

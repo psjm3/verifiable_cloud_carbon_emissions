@@ -5,7 +5,7 @@ import fsAsync from 'fs/promises';
 import { Field } from "o1js";
 import { Invoice } from "../src/types/invoice.js";
 import { Customer } from "../src/types/customer.js";
-import { log, logStreamStart } from "../src/utils/util.js";
+import { log, logStreamStart, logStreamStop } from "../src/utils/util.js";
 
 let path = './test_output'
 if (!fs.existsSync(path)) {
@@ -72,5 +72,6 @@ deserialisedCust.invoice.timeTo.assertEquals(customer.invoice.timeTo);
 deserialisedCust.invoice.resourcesCharges.assertEquals(customer.invoice.resourcesCharges);
 deserialisedCust.invoice.otherCharges.assertEquals(customer.invoice.otherCharges);
 
-await fsAsync.rm("./test_output/test_customer.json")
+await fsAsync.rm("./test_output/test_customer.json");
+logStreamStop("./test_output/test_customer_types.out");
 

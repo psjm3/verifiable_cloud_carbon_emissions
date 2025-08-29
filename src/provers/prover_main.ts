@@ -5,16 +5,22 @@ import fsAsync from 'fs/promises';
 import { customerSharesCircuit } from '../zkPrograms/zkprogram_customer_shares.js';
 import { totalEmissionsCircuit } from '../zkPrograms/zkprogram_total_emissions.js';
 import { perCustomerEmissionsCircuit } from '../zkPrograms/zkprogram_per_customer_proof.js';
+import { log, logStreamStart, logStreamStop } from '../utils/util.js';
+import { NUM_OF_CUSTOMERS } from '../types/merkle_tree.js';
+import { NUM_OF_VERIFIER } from '../types/customer.js';
 
-// Create artifacts directories
+/***************/
+/* PREPARATION */
+/***************/
 async function createArtifactFolders() {
     const paths = [
         './generated_proofs/',
         './generated_public_keys/',
         './generated_smart_meters/',
         './generated_witnesses/',
-        './generated_intensity/',
-        './generated_meter_readings/'
+        './generated_intensities/',
+        './generated_meter_readings/',
+        './generated_logs'
     ]
 
     paths.forEach((path) => {
@@ -22,25 +28,33 @@ async function createArtifactFolders() {
             fsAsync.mkdir(
                 path, { recursive: true }
             ).catch(err => {
-                console.error('Error creating directory for', path, err);
+                log(`ERROR: Prover_main, Error creating directory for ${path}: ${err}`);
                 process.exit(1);
             });
         }
     })
 }
+const logFile = "./generated_logs/prover_main.out"
+logStreamStart(logFile);
 
+const proverMainTimeStart = performance.now();
+log(`Prover_main, Starts\n`);
 
 const totalEmissionsProofsExec = promisify(exec);
 async function totalEmissionsProofsRunner() {
     try {
         const { stdout, stderr } = await totalEmissionsProofsExec(
-            'tsx ./src/provers/prover_total_emissions.ts', 
-            {maxBuffer: 512 * 1024}
+            'tsx ./src/provers/prover_total_emissions.ts',
+            { maxBuffer: 512 * 1024 }
         );
-        console.log('stdout:', stdout);
-        console.log('stderr:', stderr);
-    } catch (e) {
-        console.error(e);
+        if (stdout != "") {
+            log(`${stdout}\n`);
+        }
+        if (stderr != "") {
+            log(`${stderr}\n`);
+        }
+    } catch (err) {
+        log(`ERROR: Prover_main, ${err}\n`);
     }
 }
 
@@ -48,53 +62,62 @@ const customerSharesProofsExec = promisify(exec);
 async function customerSharesProofsRunner() {
     const { stdout, stderr } = await customerSharesProofsExec(
         'tsx ./src/provers/prover_customer_shares.ts',
-        {maxBuffer: 2048 * 1024}
+        { maxBuffer: 2048 * 1024 }
     );
-    console.log('stdout:', stdout);
-    console.log('stderr:', stderr);
+    if (stdout != "") {
+        log(`${stdout}\n`);
+    }
+    if (stderr != "") {
+        log(`${stderr}\n`);
+    }
 }
 
 const perCustomerProofsExec = promisify(exec);
 async function perCustomerProofsRunner() {
     const { stdout, stderr } = await perCustomerProofsExec(
         'tsx ./src/provers/prover_per_customer_emissions.ts',
-        {maxBuffer: 512 * 1024}
+        { maxBuffer: 512 * 1024 }
     );
-    console.log('stdout:', stdout);
-    console.log('stderr:', stderr);
+    if (stdout != "") {
+        log(`${stdout}\n`);
+    }
+    if (stderr != "") {
+        log(`${stderr}\n`);
+    }
 }
 
-console.time("OVERALL TIME TAKEN FOR FULL SETS OF PROOFS")
+/******************/
+/* PROGRAM STARTS */
+/******************/
 await createArtifactFolders();
 
-console.log("Get number of constraints for each zkprogram...")
+const totalEmissionsAnalysis = await totalEmissionsCircuit.analyzeMethods();
+log(`Prover_main, Constraints_of_total_emissions_base, how_many, ${totalEmissionsAnalysis.baseTotalEmissionsProof.rows}
+Prover_main, Constraints_of_total_emissions_step, how_many, ${totalEmissionsAnalysis.stepTotalEmissionsProof.rows}\n`);
 
-let totalEmissionsAnalysis = await totalEmissionsCircuit.analyzeMethods();
-console.log("Number of constraints for total emissions base", totalEmissionsAnalysis.baseTotalEmissionsProof.rows);
-console.log("Number of constraints for total emissions rec", totalEmissionsAnalysis.stepTotalEmissionsProof.rows);
+const customerSharesAnalysis = await customerSharesCircuit.analyzeMethods();
+log(`Prover_main, Constraints_of_customer_shares_base, how_many, ${customerSharesAnalysis.baseSumOfSharesProof.rows};
+Prover_main, Constraints_of_customer_shares_step, how_many, ${customerSharesAnalysis.stepSumOfSharesProof.rows}\n`);
 
-let customerSharesAnalysis = await customerSharesCircuit.analyzeMethods();
-console.log("Number of constraints for customer shares base", customerSharesAnalysis.baseSumOfSharesProof.rows);
-console.log("Number of constraints for customer shares rec", customerSharesAnalysis.stepOneSumOfSharesProof.rows);
+const perCustomerEmissionssAnalysis = await perCustomerEmissionsCircuit.analyzeMethods();
+log(`Prover_main, Constraints_of_per_customer_emissions, how_many, ${perCustomerEmissionssAnalysis.emissionsProof.rows}\n`);
 
-let perCustomerEmissionssAnalysis = await perCustomerEmissionsCircuit.analyzeMethods();
-console.log("Number of constraints for per customer emissions", perCustomerEmissionssAnalysis.emissionsProof.rows);
-
-console.log("Running total emissions proof...")
-console.time("OVERALL TIME TAKEN FOR GENERATING TOTAL EMISSIONS PROOFS")
+const threeProofsTimeStart = performance.now();
+log(`Prover_main, Running_total_emissions_proof...\n`)
+const totalEmissionsTimeStart = performance.now();
 await totalEmissionsProofsRunner();
-console.timeEnd("OVERALL TIME TAKEN FOR GENERATING TOTAL EMISSIONS PROOFS")
+log(`Prover_main, Total_emissions_proof, time, ${performance.now() - totalEmissionsTimeStart}\n`);
 
-console.log("Running customer shares proof...")
-console.time("OVERALL TIME TAKEN FOR GENERATING CUSTOMER SHARES PROOFS")
+log(`Prover_main, Running_customer_shares_proof...\n`)
+const customerSharesTimeStart = performance.now();
 await customerSharesProofsRunner();
-console.timeEnd("OVERALL TIME TAKEN FOR GENERATING CUSTOMER SHARES PROOFS")
+log(`Prover_main, Customer_shares_proof, time, ${performance.now() - customerSharesTimeStart},  numOfCustomers, ${NUM_OF_CUSTOMERS}\n`);
 
-console.log("Running per customer carbon emissions proof...")
-console.time("OVERALL TIME TAKEN FOR GENERATING 8 CUSTOMER CARBON EMISSIONS PROOFS")
+log(`Prover_main, Running_per_customer_emissions_proof...\n`);
+const overallPerCustomerTimeStart = performance.now();
 await perCustomerProofsRunner();
-console.timeEnd("OVERALL TIME TAKEN FOR GENERATING 8 CUSTOMER CARBON EMISSIONS PROOFS")
+log(`Prover_main, Per_customer_emissions_proof, time, ${performance.now() - overallPerCustomerTimeStart}, numOfVerifiers, ${NUM_OF_VERIFIER}\n`);
 
-console.timeEnd("OVERALL TIME TAKEN FOR FULL SETS OF PROOFS")
-
-console.log("Prover Main", process.pid, "CPU usage:", process.cpuUsage());
+log(`Prover_main, all_three_proofs, time, ${performance.now() - threeProofsTimeStart}\n`);
+log(`Prover_main, Ends, time, ${performance.now() - proverMainTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
+logStreamStop(logFile);

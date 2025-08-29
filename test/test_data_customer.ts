@@ -4,11 +4,11 @@ import fsAsync from 'fs/promises';
 import { Field } from 'o1js';
 import { Customer, CUSTOMER_SHARES_TOTAL } from '../src/types/customer.js'
 import { CustomerData } from '../src/data/data_customers.js';
-import { NUM_OF_CUSTOMERS, TREE_HEIGHT, TREE_NUM_OF_LEAFS } from '../src/types/o1js_merkle_tree.js';
+import { NUM_OF_CUSTOMERS, TREE_HEIGHT, TREE_NUM_OF_LEAFS } from '../src/types/merkle_tree.js';
 import { TEST_PERIOD_FROM_TIMESTAMP, TEST_PERIOD_TO_TIMESTAMP } from '../src/data/data_timestamps.js';
 import { log, logStreamStart, logStreamStop } from '../src/utils/util.js';
 
-// SET NUM_OF_CUSTOMERS and BATCH_NUM_OF_CUSTOMERS for the Merkle tree on src/types/o1js_merkle_tree.ts
+// SET NUM_OF_CUSTOMERS and BATCH_NUM_OF_CUSTOMERS for the Merkle tree on src/types/merkle_tree.ts
 let path = './test_output'
 if (!fs.existsSync(path)) {
     fsAsync.mkdir(

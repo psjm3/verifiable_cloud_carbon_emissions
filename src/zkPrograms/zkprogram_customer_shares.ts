@@ -1,5 +1,5 @@
 import { assert, Bool, Field, Poseidon, Provable, SelfProof, ZkProgram } from "o1js";
-import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums, NodeContent } from "../types/o1js_merkle_tree.js";
+import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums, NodeContent } from "../types/merkle_tree.js";
 import { Customer, CUSTOMER_SHARES_TOTAL } from "../types/customer.js";
 import { Invoice } from "../types/invoice.js";
 
@@ -78,7 +78,7 @@ export const customerSharesCircuit = ZkProgram({
                 return { publicOutput: subTreeRoot }
             }
         },
-        stepOneSumOfSharesProof: {
+        stepSumOfSharesProof: {
             privateInputs: [ 
                 SelfProof, 
                 SelfProof,

@@ -10,9 +10,9 @@ export { Witness, MerkleTreeWithSums, MerkleWitnessWithSums, BaseMerkleWitnessWi
 // have a fixed size array and the size depends on the tree height.
 // Alternative is to move the Merkle tree witness definitions into the 
 // customer data class.
-
-export const NUM_OF_CUSTOMERS = 128;
-export const BATCH_NUM_OF_CUSTOMERS =128;
+// TODO: Make this into a class and set these via a static function
+export const NUM_OF_CUSTOMERS = 8;
+export const BATCH_NUM_OF_CUSTOMERS = 4;
 
 // Number of proofs required is 2^treeHeight - 1, and we need to have all the proofs to the root.
 // The nodes that haven't got any customer data will have to be constructed using dummy Field(0) 
@@ -142,7 +142,7 @@ class MerkleTreeWithSums {
             throw new Error(`index ${index} is out of range for ${this.leafCount} leaves.`);
         }
         this.setNode(0, index, leaf);
-        //console.log("level: 0 index:", index, "hash:", leaf.hash.toString(), "sum:", leaf.sum.toString());
+        //debugLog(`merkle_tree, level 0, index, ${index}, hash, ${leaf.hash.toString()}, sum, ${leaf.sum.toString()}`);
 
         let currIndex = index;
         for (let level = 1; level < this.height; level++) {
@@ -157,7 +157,7 @@ class MerkleTreeWithSums {
             left.ratioUpperBound.assertEquals(right.ratioUpperBound);
 
 
-            //console.log("level:", level, "index:", currIndex, "hashing left:", left.hash.toString(), " right:", right.hash.toString());
+            //debugLog(`merkle_tree, level, ${level}, index: ${currIndex}, hashing left, ${left.hash.toString()}, right, ${right.hash.toString()}`);
             let newNode = new NodeContent({
                 hash: Poseidon.hash([left.hash, right.hash]),
                 totalCustomerShares: left.totalCustomerShares.add(right.totalCustomerShares),
@@ -168,7 +168,7 @@ class MerkleTreeWithSums {
                 ratioUpperBound: left.ratioUpperBound
             });
 
-            //console.log("level:", level, "index:", currIndex, "hash:", newNode.hash.toString(), "sum:", newNode.sum.toString());
+            //debugLog(`merkle_tree, level, ${level}, index, ${currIndex}, hash, ${newNode.hash.toString()}, sum, ${newNode.sum.toString()}`);
 
             this.setNode(level, currIndex, newNode);
         }
@@ -291,19 +291,16 @@ class BaseMerkleWitnessWithSums extends Struct({
     calculateRoot(leaf: NodeContent): NodeContent {
         let node = leaf;
 
-        //console.log("Calculating root for: (hash)", leaf.hash.toString(), "(sum)", leaf.sum.toString());
+        //debugLog(`merkle_tree, calculating_root_for_hash, ${leaf.hash.toString()}, for_sum, ${leaf.sum.toString()}`);
 
         for (let i = 1; i < this.height(); ++i) {
 
             let isLeft: Bool = this.isLeft[i - 1];
-            //console.log("At level:", i, "isLeft:", isLeft.toString());
-
-            //console.log("node:", node.hash.toString(), "this.path[i-1]:", this.path[i-1].hash.toString());
+            //debugLog(`merkle_tree, level, ${i}, isLeft, ${isLeft.toString()}, node, ${node.hash.toString()}, this.path[${i-1}], ${this.path[i-1].hash.toString()}`);
 
             const [left, right] = conditionalSwap(isLeft, node, this.path[i - 1]);
 
-            //console.log("left hash:", left.hash.toString(), "right hash:", right.hash.toString());
-            //console.log("left sum:", left.sum.toString(), "right sum:", right.sum.toString());
+            //debugLog(`merkle_tree, left_hash, ${left.hash.toString()}, right_hash, ${right.hash.toString()}, left_sum, ${left.sum.toString()}, right_sum, ${right.sum.toString()}`);
 
             left.ratioLowerBound.assertEquals(right.ratioLowerBound);
             right.ratioUpperBound.assertEquals(right.ratioUpperBound);
