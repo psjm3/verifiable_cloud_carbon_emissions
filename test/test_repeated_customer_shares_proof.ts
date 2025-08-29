@@ -2,8 +2,8 @@ import { promisify } from 'util';
 import { exec } from 'child_process';
 import fs from 'fs';
 import fsAsync from 'fs/promises';
-import { log, logStreamStart, logStreamStop } from '../../src/utils/util.js';
-import { NUM_OF_CUSTOMERS } from '../../src/types/merkle_tree.js';
+import { log, logStreamStart, logStreamStop } from '../src/utils/util.js';
+import { NUM_OF_CUSTOMERS } from '../src/types/merkle_tree.js';
 
 /***************/
 /* PREPARATION */
