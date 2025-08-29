@@ -59,20 +59,23 @@ export const customerSharesCircuit = ZkProgram({
                         ));
 
                 }
-                // Prove that the private customer records provided by the prover 
-                // form a merkle tree that has the same root hash as the public root hash
+                // Prove that the private customer records provided by the prover computes to the same 
+                // root hash as the input subtree root hash and the same sums as the sums on the subtree root node
                 subTreeRoot.hash.assertEquals(
                     customerTree.getRoot().hash,
                     "Base nodes do not match with their parent's hash on the merkle tree"
                 );
-                // Prove that sum of customer shares = sum on the root node of this subtree.
+                subTreeRoot.totalCustomerShares.assertEquals(
+                    customerTree.getRoot().totalCustomerShares,
+                    "Base nodes do not match with their parent's customer shares sum on the merkle tree"
+                );
                 subTreeRoot.totalResourceCharges.assertEquals(
                     customerTree.getRoot().totalResourceCharges,
-                    "Base nodes do not match with their parent's sum on the merkle tree"
+                    "Base nodes do not match with their parent's resources charges sum on the merkle tree"
                 );
                 subTreeRoot.totalOtherCharges.assertEquals(
                     customerTree.getRoot().totalOtherCharges,
-                    "Base nodes do not match with their parent's sum on the merkle tree"
+                    "Base nodes do not match with their parent's other charges sum on the merkle tree"
                 );
 
                 return { publicOutput: subTreeRoot }
