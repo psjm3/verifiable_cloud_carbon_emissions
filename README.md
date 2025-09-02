@@ -1,6 +1,6 @@
 # Verifiable Carbon Emissions Experiment using o1js
 
-## Directory Structure
+## Directory structure
 The test directory contains standalone programs that validate the test data used as different circuit inputs. The output from each test is store in test_output directory with the filename matching the name of the test program.
 
 The src directory contains the main code for the three circuits. It is further divided into sub-folders:
@@ -14,7 +14,7 @@ The src directory contains the main code for the three circuits. It is further d
 
 The python directory contains a Jupyter notebook that has python code to generate graphs using the time measurements from running the customer shares circuit.
 
-## Runtime set up
+## Runtime environment set up
 ### nvm
 If your environment does not have [nvm](https://github.com/nvm-sh/nvm) already installed, first install nvm (current latest version is v0.40.3, which can be replaced with a more up-to-date version)
 ```shell
@@ -31,21 +31,14 @@ To verify that nvm has been installed:
 command -v nvm
 ```
 
-### node and npm
+### node, npm and the dependencies
 Once you have nvm installed you can then install the Nodejs and typescript runtime by installing node and npm:
 ```shell
 nvm install node
-npm install typescript --save-dev
+npm install
 ```
 
-### Node.js modules required
-```shell
-npm install tsx
-npm install o1js
-npm install json-with-bigint
-```
-
-## Run Provers
+## Run provers
 Before running any of the provers, review the following constants first:
 
 - The timestamps for the reporting period and invoices. They are defined in src/data/data_timestamps.ts. Please note that the carbon intensity factors are obtained using the [National Energy System Operator (NESO)'s API](https://carbon-intensity.github.io/api-definitions/#get-intensity-from-to), they seem to only provide data dated no more than 60 days from current date. Also, the data set could be incomplete between the specified date range. In our experiment we found that, for example, the data between Sun Aug 10 2025 00:00:00 and Sun Aug 10 2025 08:00:00 are missing. Therefore in `src/provers/prover_total_emissions.ts`, the generated intensity factors are serialised if a new set is needed, or it would skip the API call to pull the data and simply read from a previously serialised set of signed factors. To get a fresh set of intensity factors, set the `REGENERATE_INTENSITY` flag to true, or to skip the API call set it to false.
@@ -58,26 +51,34 @@ Before running any of the provers, review the following constants first:
 
 Also note that the output (e.g. the time measurements) are all stored in the directory generated_logs, one file per prover_* and per proof_workers_*, and one for the verifier_main. These output files are opened for append only, that means that if you run the same program more than once, the results from both runs will be stored on the same files. To avoid confusion you might want to consider saving the generated_logs/* files somewhere else after each run and empty the generated_logs directory before a fresh run.
 
+The time measurements are either in milliseconds (ms, measured using the Node.js performance.now() API) or in microseconds (us, measured using Node.js process.cpuUsage API). There is a utility program you can use to convert all 'ms' and 'us' to hh:mm:ss.sss in utils/log_parser.ts. You can run it by executing:
+
+```shell
+npm exec tsx src/utils/log_parser.ts <log_file>
+```
+
+### Main prover - all three proofs end to end
+
 ```shell
 npm exec tsx src/provers/prover_main.ts
 ```
-or if not using the utils.log() function to write the log messages to a file, this command could pipe all stdout and stderr to a file:
-```shell
-npm exec tsx src/provers/prover_main.ts 2>&1 | tee prover_main.txt
-```
 
+### Three provers separately
 Each prover can be invoked directly and run standalone.
 
 (To generate the total emissions proof only)
 ```shell
 npm exec tsx src/provers/prover_total_emissions.ts
 ```
-(To generate the customer shares proof only, it depends on a pre-existing total emissions proof output)
+(To generate the customer shares proof only, it depends on pre-existing total emissions proof)
 ```shell
 npm exec tsx src/provers/prover_customer_shares.ts
 ```
-
-## Run Verifier
+(To generate the per-customer carbon emissions proof for one customer only, it depends on pre-existing total emissions and customer shares proofs)
+```shell
+npm exec tsx src/provers/prover_per_customer_emissions.ts
+```
+## Run verifier
 ```shell
 npm exec tsx src/verifier_main.ts
 ```

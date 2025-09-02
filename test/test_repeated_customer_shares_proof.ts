@@ -2,8 +2,10 @@ import { promisify } from 'util';
 import { exec } from 'child_process';
 import fs from 'fs';
 import fsAsync from 'fs/promises';
-import { log, logStreamStart, logStreamStop } from '../src/utils/util.js';
+import { createObjectCsvWriter } from 'csv-writer';
 import { NUM_OF_CUSTOMERS } from '../src/types/merkle_tree.js';
+import { CsvWriter } from 'csv-writer/src/lib/csv-writer.js';
+import { ObjectMap } from 'csv-writer/src/lib/lang/object.js';
 
 /***************/
 /* PREPARATION */
@@ -31,22 +33,40 @@ async function createArtifactFolders() {
     })
 }
 const logFile = "./test_logs/test_repeated_customer_shares_proof.out"
-logStreamStart(logFile);
-
+let csvWriter : CsvWriter<ObjectMap<any>>;
+if (fs.existsSync(logFile)) {
+    csvWriter = createObjectCsvWriter({
+        append: true,
+        path: logFile,
+        header: [
+            {id: 'src', title: 'src_file'},
+            {id: 'data', title: 'data'},
+            {id: 'value', title: 'value'},
+            {id: 'datatype', title: 'data_type'},
+        ]
+    });
+} else {
+    csvWriter = createObjectCsvWriter({
+        path: logFile,
+        header: [
+            {id: 'src', title: 'src_file'},
+            {id: 'data', title: 'data'},
+            {id: 'value', title: 'value'},
+            {id: 'datatype', title: 'data_type'},
+        ]
+    }); 
+}
+let logData = [];
 const testTimeStart = performance.now();
-log(`Test_repeated_customer_shares, Starts\n`);
 
 const customerSharesProofsExec = promisify(exec);
 async function customerSharesProofsRunner() {
-    const { stdout, stderr } = await customerSharesProofsExec(
-        'tsx ./src/provers/prover_customer_shares.ts',
-        { maxBuffer: 2048 * 1024 }
-    );
-    if (stdout != "") {
-        log(`${stdout}\n`);
-    }
-    if (stderr != "") {
-        log(`${stderr}\n`);
+    try {
+        await customerSharesProofsExec(
+            'tsx ./src/provers/prover_customer_shares.ts',
+            { maxBuffer: 2048 * 1024 })
+    } catch (err) {
+        logData.push({ src: 'test_repeated_customer_shares_proof', data: 'ERROR: child process prover_customer_shares.ts', value: err, datatype: 'text' });
     }
 }
 
@@ -56,10 +76,15 @@ async function customerSharesProofsRunner() {
 await createArtifactFolders();
 
 for (let i = 0; i < 5; i++) {
-    log(`Test_repeated_total_emissions, Running_total_emissions_proof_iteration, ${i}\n`)
+    logData.push({ src: 'test_repeated_customer_shares_proof', data: 'Running customer shares proof for ' + NUM_OF_CUSTOMERS + ' iteration ', value: i, datatype: 'number' });
+
     const customerSharesTimeStart = performance.now();
     await customerSharesProofsRunner();
-    log(`Test_repeated_customer_shares, Customer_shares_proof, iteration, ${i}, time, ${performance.now() - customerSharesTimeStart},  numOfCustomers, ${NUM_OF_CUSTOMERS}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
+    logData.push({ src: 'test_repeated_customer_shares_proof', data: 'Completed one customer shares proof - Time taken', value: (performance.now() - customerSharesTimeStart), datatype: 'ms' });
+    logData.push({ src: 'test_repeated_customer_shares_proof', data: 'Completed one customer shares proof - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
+    logData.push({ src: 'test_repeated_customer_shares_proof', data: 'Completed one customer shares proof - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
 }
-log(`Test_repeated_customer_shares, Ends, time, ${performance.now() - testTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
-logStreamStop(logFile);
+logData.push({ src: 'test_repeated_customer_shares_proof', data: 'Customer shares proof 5 times overall - time taken', value: (performance.now() - testTimeStart), datatype: 'ms' })
+logData.push({ src: 'test_repeated_customer_shares_proof', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
+logData.push({ src: 'test_repeated_customer_shares_proof', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
+csvWriter.writeRecords(logData).then(() => console.log('test_repeated_customer_shares_proof logs-writing to file completed'));

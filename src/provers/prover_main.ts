@@ -5,9 +5,11 @@ import fsAsync from 'fs/promises';
 import { customerSharesCircuit } from '../zkPrograms/zkprogram_customer_shares.js';
 import { totalEmissionsCircuit } from '../zkPrograms/zkprogram_total_emissions.js';
 import { perCustomerEmissionsCircuit } from '../zkPrograms/zkprogram_per_customer_proof.js';
-import { log, logStreamStart, logStreamStop } from '../utils/util.js';
 import { NUM_OF_CUSTOMERS } from '../types/merkle_tree.js';
 import { NUM_OF_VERIFIER } from '../types/customer.js';
+import { createObjectCsvWriter } from 'csv-writer';
+import { CsvWriter } from 'csv-writer/src/lib/csv-writer.js';
+import { ObjectMap } from 'csv-writer/src/lib/lang/object.js';
 
 /***************/
 /* PREPARATION */
@@ -35,54 +37,66 @@ async function createArtifactFolders() {
     })
 }
 const logFile = "./generated_logs/prover_main.out"
-logStreamStart(logFile);
+let csvWriter : CsvWriter<ObjectMap<any>>;
+if (fs.existsSync(logFile)) {
+    csvWriter = createObjectCsvWriter({
+        append: true,
+        path: logFile,
+        header: [
+            {id: 'src', title: 'src_file'},
+            {id: 'data', title: 'data'},
+            {id: 'value', title: 'value'},
+            {id: 'datatype', title: 'data_type'},
+        ]
+    });
+} else {
+    csvWriter = createObjectCsvWriter({
+        path: logFile,
+        header: [
+            {id: 'src', title: 'src_file'},
+            {id: 'data', title: 'data'},
+            {id: 'value', title: 'value'},
+            {id: 'datatype', title: 'data_type'},
+        ]
+    }); 
+}
+let logData = [];
 
 const proverMainTimeStart = performance.now();
-log(`Prover_main, Starts\n`);
 
 const totalEmissionsProofsExec = promisify(exec);
 async function totalEmissionsProofsRunner() {
     try {
-        const { stdout, stderr } = await totalEmissionsProofsExec(
+        await totalEmissionsProofsExec(
             'tsx ./src/provers/prover_total_emissions.ts',
             { maxBuffer: 512 * 1024 }
         );
-        if (stdout != "") {
-            log(`${stdout}\n`);
-        }
-        if (stderr != "") {
-            log(`${stderr}\n`);
-        }
     } catch (err) {
-        log(`ERROR: Prover_main, ${err}\n`);
+        logData.push({ src: 'prover_main', data: 'ERROR: child process prover_total_emissions.ts', value: err, datatype: 'text' })
     }
 }
 
 const customerSharesProofsExec = promisify(exec);
 async function customerSharesProofsRunner() {
-    const { stdout, stderr } = await customerSharesProofsExec(
-        'tsx ./src/provers/prover_customer_shares.ts',
-        { maxBuffer: 2048 * 1024 }
-    );
-    if (stdout != "") {
-        log(`${stdout}\n`);
-    }
-    if (stderr != "") {
-        log(`${stderr}\n`);
+    try {
+        await customerSharesProofsExec(
+            'tsx ./src/provers/prover_customer_shares.ts',
+            { maxBuffer: 2048 * 1024 }
+        );
+    } catch (err) {
+        logData.push({ src: 'prover_main', data: 'ERROR: child process prover_customer_shares.ts', value: err, datatype: 'text' })
     }
 }
 
 const perCustomerProofsExec = promisify(exec);
 async function perCustomerProofsRunner() {
-    const { stdout, stderr } = await perCustomerProofsExec(
-        'tsx ./src/provers/prover_per_customer_emissions.ts',
-        { maxBuffer: 512 * 1024 }
-    );
-    if (stdout != "") {
-        log(`${stdout}\n`);
-    }
-    if (stderr != "") {
-        log(`${stderr}\n`);
+    try {
+        await perCustomerProofsExec(
+            'tsx ./src/provers/prover_per_customer_emissions.ts',
+            { maxBuffer: 512 * 1024 }
+        );
+    } catch (err) {
+        logData.push({ src: 'prover_main', data: 'ERROR: child process prover_per_customer_emissions.ts', value: err, datatype: 'text' })
     }
 }
 
@@ -92,32 +106,31 @@ async function perCustomerProofsRunner() {
 await createArtifactFolders();
 
 const totalEmissionsAnalysis = await totalEmissionsCircuit.analyzeMethods();
-log(`Prover_main, Constraints_of_total_emissions_base, how_many, ${totalEmissionsAnalysis.baseTotalEmissionsProof.rows}
-Prover_main, Constraints_of_total_emissions_step, how_many, ${totalEmissionsAnalysis.stepTotalEmissionsProof.rows}\n`);
-
+logData.push({ src: 'prover_main', data: 'constraints of total emissions BASE', value: totalEmissionsAnalysis.baseTotalEmissionsProof.rows, datatype: 'number' })
+logData.push({ src: 'prover_main', data: 'constraints of total emissions STEP', value: totalEmissionsAnalysis.stepTotalEmissionsProof.rows, datatype: 'number' })
 const customerSharesAnalysis = await customerSharesCircuit.analyzeMethods();
-log(`Prover_main, Constraints_of_customer_shares_base, how_many, ${customerSharesAnalysis.baseSumOfSharesProof.rows};
-Prover_main, Constraints_of_customer_shares_step, how_many, ${customerSharesAnalysis.stepSumOfSharesProof.rows}\n`);
-
+logData.push({ src: 'prover_main', data: 'constraints of customer shares BASE', value: customerSharesAnalysis.baseSumOfSharesProof.rows, datatype: 'number' })
+logData.push({ src: 'prover_main', data: 'constraints of customer shares STEP', value: customerSharesAnalysis.stepSumOfSharesProof.rows, datatype: 'number' })
 const perCustomerEmissionssAnalysis = await perCustomerEmissionsCircuit.analyzeMethods();
-log(`Prover_main, Constraints_of_per_customer_emissions, how_many, ${perCustomerEmissionssAnalysis.emissionsProof.rows}\n`);
+logData.push({ src: 'prover_main', data: 'constraints of per customer emissions', value: perCustomerEmissionssAnalysis.emissionsProof.rows, datatype: 'number' })
 
 const threeProofsTimeStart = performance.now();
-log(`Prover_main, Running_total_emissions_proof...\n`)
 const totalEmissionsTimeStart = performance.now();
 await totalEmissionsProofsRunner();
-log(`Prover_main, Total_emissions_proof, time, ${performance.now() - totalEmissionsTimeStart}\n`);
+logData.push({ src: 'prover_main', data: 'total emissions proof - time taken', value: (performance.now() - totalEmissionsTimeStart), datatype: 'ms' })
 
-log(`Prover_main, Running_customer_shares_proof...\n`)
 const customerSharesTimeStart = performance.now();
 await customerSharesProofsRunner();
-log(`Prover_main, Customer_shares_proof, time, ${performance.now() - customerSharesTimeStart},  numOfCustomers, ${NUM_OF_CUSTOMERS}\n`);
+logData.push({ src: 'prover_main', data: 'customer shares proof - time taken', value: (performance.now() - customerSharesTimeStart), datatype: 'ms' })
+logData.push({ src: 'prover_main', data: 'customer shares proof - number of customers', value: NUM_OF_CUSTOMERS, datatype: 'number' })
 
-log(`Prover_main, Running_per_customer_emissions_proof...\n`);
 const overallPerCustomerTimeStart = performance.now();
 await perCustomerProofsRunner();
-log(`Prover_main, Per_customer_emissions_proof, time, ${performance.now() - overallPerCustomerTimeStart}, numOfVerifiers, ${NUM_OF_VERIFIER}\n`);
+logData.push({ src: 'prover_main', data: 'per customer emissions proof - time taken', value: (performance.now() - overallPerCustomerTimeStart), datatype: 'ms' })
+logData.push({ src: 'prover_main', data: 'per customer emissions proof - number of verifier', value: NUM_OF_VERIFIER, datatype: 'number' })
 
-log(`Prover_main, all_three_proofs, time, ${performance.now() - threeProofsTimeStart}\n`);
-log(`Prover_main, Ends, time, ${performance.now() - proverMainTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
-logStreamStop(logFile);
+logData.push({ src: 'prover_main', data: 'generated three proofs overall - time taken', value: (performance.now() - threeProofsTimeStart), datatype: 'ms' })
+logData.push({ src: 'prover_main', data: 'prover overall - time taken', value: (performance.now() - proverMainTimeStart), datatype: 'ms' })
+logData.push({ src: 'prover_main', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
+logData.push({ src: 'prover_main', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
+csvWriter.writeRecords(logData).then(() => console.log('prover_main logs-writing to file completed'));

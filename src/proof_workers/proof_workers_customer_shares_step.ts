@@ -5,23 +5,16 @@ import fsAsync from 'fs/promises';
 import { NodeContent } from "../types/merkle_tree.js";
 import { verify } from "o1js";
 import { customerSharesCircuit } from "../zkPrograms/zkprogram_customer_shares.js";
-import { debugLog, log, logStreamStart, logStreamStop } from "../utils/util.js";
+import { DEBUG } from "../utils/util.js";
+import { createObjectCsvWriter } from "csv-writer";
+import { CsvWriter } from "csv-writer/src/lib/csv-writer.js";
+import { ObjectMap } from "csv-writer/src/lib/lang/object.js";
 
 function convertJsonToProof<
     JsonProof,
     SerialisedProof extends { fromJSON(jsonProof: JsonProof): Promise<JsonProof> }
 >(SerialisedProof: SerialisedProof, jsonProof: JsonProof) {
     return SerialisedProof.fromJSON(jsonProof);
-}
-
-const path = './generated_logs';
-if (!fs.existsSync(path)) {
-    fsAsync.mkdir(
-        path, { recursive: true }
-    ).catch(err => {
-        console.error(`ERROR: Proof_workers_customer_shares_step, Error creating directory for ${path}: ${err}\n`);
-        process.exit(1);
-    });
 }
 
 // For 1st rec proof, number of proofs input = number of base proofs, number of proofs output = number of proofs input / BATCH_NUM_OF_CUSTOMERS
@@ -37,12 +30,7 @@ const numOfWorkers = parseInt(process.argv[2]);
 let startNodeIndex = parseInt(process.argv[3]);
 const subtreeRootLevel = parseInt(process.argv[4]);
 
-const logFile = path + '/proof_workers_customer_shares_step.out';
-logStreamStart(logFile);
-
 if (cluster.isPrimary) {
-    log(`Proof_workers_customer_shares_step, primary_process_${process.pid}_is_running...\n`);
-
     for (let i = 0; i < numOfWorkers; i++) {
         cluster.fork({ "subtreeRootLevel": subtreeRootLevel, "startNodeIndex": startNodeIndex });
         startNodeIndex = startNodeIndex + 2;
@@ -50,23 +38,57 @@ if (cluster.isPrimary) {
 
     cluster.on('exit', (worker, code, signal) => {
         if (signal) {
-            log(`ERROR: Proof_workers_customer_shares_step, worker ${worker.process.pid} was killed by signal ${signal}\n`);
+            console.log({ src: 'proof_workers_customer_shares_step', data: 'ERROR: worker ' + worker.process.pid + ' was killed by signal', value: signal, datatype: 'text' });
         } else if (code != 0) {
-            log(`ERROR: Proof_workers_customer_shares_step, worker ${worker.process.pid} exited with error code ${code}\n`);
+            console.log({ src: 'proof_workers_customer_shares_step', data: 'ERROR: worker ' + worker.process.pid + ' exited with error code', value: code, datatype: 'text' });
         } else {
-            debugLog(`Proof_workers_customer_shares_step, worker ${worker.process.pid} exited\n`);
+            console.log({ src: 'proof_workers_customer_shares_step', data: 'worker ' + worker.process.pid + ' exited', value: "", datatype: 'text' });
         }
     });
 } else {
+    const path = './generated_logs';
+    if (!fs.existsSync(path)) {
+        fsAsync.mkdir(
+            path, { recursive: true }
+        ).catch(err => {
+            console.error(`ERROR: Proof_workers_customer_shares_step, Error creating directory for ${path}: ${err}\n`);
+            process.exit(1);
+        });
+    }
+    const logFile = path + '/proof_workers_customer_shares_step.out';
+    let csvWriter: CsvWriter<ObjectMap<any>>;
+    // if (fs.existsSync(logFile)) {
+    //     csvWriter = createObjectCsvWriter({
+    //         append: true,
+    //         path: logFile,
+    //         header: [
+    //             { id: 'src', title: 'src_file' },
+    //             { id: 'data', title: 'data' },
+    //             { id: 'value', title: 'value' },
+    //             { id: 'datatype', title: 'data_type' },
+    //         ]
+    //     });
+    // } else {
+        csvWriter = createObjectCsvWriter({
+            path: logFile,
+            header: [
+                { id: 'src', title: 'src_file' },
+                { id: 'data', title: 'data' },
+                { id: 'value', title: 'value' },
+                { id: 'datatype', title: 'data_type' },
+            ]
+        });
+    // }
+    let logData = [];
     const proofWorkersTimeStart = performance.now();
     let inputNodeIndex = parseInt(process.env.startNodeIndex)
-    
-    debugLog(`Proof_workers_customer_shares_step, worker ${process.pid} started with level ${parseInt(process.env.subtreeRootLevel)} and inputNodeIndex ${inputNodeIndex}\n`);
+
+    logData.push({ src: 'proof_workers_customer_shares_step', data: 'worker ' + process.pid + ' started with level ' + parseInt(process.env.subtreeRootLevel) + ' from index ' + inputNodeIndex, value: "", datatype: 'text' })
 
     /***** Customer Shares Base (Leaf Nodes) Proofs *****/
     const compilationTimeStart = performance.now();
     const customerTreeCircuitVk = (await customerSharesCircuit.compile()).verificationKey;
-    log(`Proof_workers_customer_shares_step, customer_shares_circuit_compilation, time, ${performance.now() - compilationTimeStart}\n`);
+    logData.push({ src: 'proof_workers_customer_shares_step', data: 'customer shares circuit compilation - time taken', value: (performance.now() - compilationTimeStart), datatype: 'ms' });
 
     let subtreeRootLevel = parseInt(process.env.subtreeRootLevel)
     let parentOfSubtreeLevel = subtreeRootLevel + 1;
@@ -83,31 +105,34 @@ if (cluster.isPrimary) {
 
     const stepProofTimeStart = performance.now();
     const { proof: stepOneProof } = await customerSharesCircuit.stepSumOfSharesProof(
-        new NodeContent({ 
-            hash: subtreeRootAsNode.hash, 
+        new NodeContent({
+            hash: subtreeRootAsNode.hash,
             totalCustomerShares: subtreeRootAsNode.totalCustomerShares,
             totalResourceCharges: subtreeRootAsNode.totalResourceCharges,
             totalOtherCharges: subtreeRootAsNode.totalOtherCharges,
             ratioLowerBound: subtreeRootAsNode.ratioLowerBound,
             ratioUpperBound: subtreeRootAsNode.ratioUpperBound
-         }),
+        }),
         leftSerialisedProof,
         rightSerialisedProof
     );
-    log(`Proof_workers_customer_shares_step, one_step_proof, time, ${performance.now() - stepProofTimeStart}\n`);
+    logData.push({ src: 'proof_workers_customer_shares_step', data: 'customer shares one STEP proof - time taken', value: (performance.now() - stepProofTimeStart), datatype: 'ms' });
 
     // sanity check that the generated proof can be verified before writing to disc.
     const validStepProof = await verify(stepOneProof, customerTreeCircuitVk);
-    debugLog(`Proof_workers_customer_shares_step, step node at level ${parseInt(process.env.subtreeRootLevel)} and index ${inputNodeIndex} checked out? ${validStepProof}\n`);
-    
+    if (DEBUG) {
+        logData.push({ src: 'proof_workers_customer_shares_step', data: 'customer shares one STEP proof at level ' + parseInt(process.env.subtreeRootLevel) + ' from index ' + inputNodeIndex + ' verified?', value: validStepProof, datatype: 'text' });
+    }
     await fsAsync.writeFile(
         "./generated_proofs/subtree_proof_" + parentOfSubtreeLevel + "_" + parentOfSubtreeIdx + ".json", JSON.stringify(stepOneProof.toJSON())
     ).then(() => {
-        log(`Proof_workers_customer_shares_step, Ends, worker_pid, ${process.pid}, level, ${parseInt(process.env.subtreeRootLevel)}, inputNodeIndex ${inputNodeIndex}, time, ${performance.now() - proofWorkersTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
-        logStreamStop(path);
+        logData.push({ src: 'proof_workers_customer_shares_step', data: 'proof of one customer shares STEP batch at level ' + parseInt(process.env.subtreeRootLevel) + ' from index ' + inputNodeIndex + ' - time taken', value: (performance.now() - proofWorkersTimeStart), datatype: 'ms' })
+        logData.push({ src: 'proof_workers_customer_shares_step', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
+        logData.push({ src: 'proof_workers_customer_shares_step', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
+        csvWriter.writeRecords(logData).then(() => console.log('proof_workers_customer_shares_step logs-writing to file completed'));
     }).catch(err => {
-        log(`ERROR: Proof_workers_customer_shares_step, error writing to ./generated_proofs/subtree_proof_${parentOfSubtreeLevel}_${parentOfSubtreeIdx}.json: ${err}\n`);
-        logStreamStop(path);
+        logData.push({ src: 'proof_workers_customer_shares_step', data: 'ERROR: error writing to ./generated_proofs/subtree_proof_' + parentOfSubtreeLevel + '_' + parentOfSubtreeIdx + '.json', value: err, datatype: 'text' })
+        csvWriter.writeRecords(logData).then(() => console.log('proof_workers_customer_shares_step logs-writing to file completed'));
         process.exit(1);
     });
     process.exit(0);

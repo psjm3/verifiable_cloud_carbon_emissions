@@ -10,6 +10,9 @@ import { SignedIntensityFactor } from "../src/types/carbon_intensity_factor.js";
 import { SignedMeterReading } from "../src/types/meter_readings.js";
 import { TEST_PERIOD_FROM_TIMESTAMP, TEST_PERIOD_TO_TIMESTAMP } from "../src/data/data_timestamps.js";
 import { log, logStreamStart, logStreamStop } from '../src/utils/util.js';
+import { createObjectCsvWriter } from 'csv-writer';
+import { CsvWriter } from 'csv-writer/src/lib/csv-writer.js';
+import { ObjectMap } from 'csv-writer/src/lib/lang/object.js';
 
 console.time("OVERALL");
 const paths = [
@@ -26,7 +29,31 @@ paths.forEach((path) => {
         });
     }
 });
-logStreamStart("./test_output/test_data_meter_readings.out");
+const logFile =  './test_output/test_data_meter_readings.out';
+let csvWriter : CsvWriter<ObjectMap<any>>;
+if (fs.existsSync(logFile)) {
+    csvWriter = createObjectCsvWriter({
+        append: true,
+        path: logFile,
+        header: [
+            {id: 'src', title: 'src_file'},
+            {id: 'data', title: 'data'},
+            {id: 'value', title: 'value'},
+            {id: 'datatype', title: 'data_type'},
+        ]
+    });
+} else {
+    csvWriter = createObjectCsvWriter({
+        path: logFile,
+        header: [
+            {id: 'src', title: 'src_file'},
+            {id: 'data', title: 'data'},
+            {id: 'value', title: 'value'},
+            {id: 'datatype', title: 'data_type'},
+        ]
+    }); 
+}
+let logData = [];
 
 const gridOperatorObj = new GridOperator();
 const meterManufacturerObj = new SmartMeterManufacturer();
@@ -42,8 +69,8 @@ const signedIntensityFor30Days: SignedIntensityFactor[] = await gridOperatorObj.
     TEST_PERIOD_FROM_TIMESTAMP,
     TEST_PERIOD_TO_TIMESTAMP
 );
-log(`
-Time taken to sign intensities: ${performance.now() - getIntensityTimeStart}ms`);
+logData.push({ src: 'test_data_meter_readings', data: 'Get 30 days signed intensity factors - time taken', value: (performance.now() - getIntensityTimeStart), datatype: 'ms' });
+
 assert(signedIntensityFor30Days.length == 1440);
 
 let measuredPeriodFromTimestamps: Field[] = []
@@ -57,8 +84,8 @@ const signedMeterReadingsFor30Days: SignedMeterReading[] = await smartMeterDataO
     measuredPeriodFromTimestamps,
     signedIntensityFor30Days[signedIntensityFor30Days.length - 1].timeTo
 );
-log(`
-time taken to sign meter readings: ${performance.now() - getMeterReadingsTimeStart}ms`);
+logData.push({ src: 'test_data_meter_readings', data: 'Get 30 days signed meter readings - time taken', value: (performance.now() - getMeterReadingsTimeStart), datatype: 'ms' });
+
 assert(signedMeterReadingsFor30Days.length == 1441);
 
 const verifyMeterReadingSigTimeStart = performance.now();
@@ -72,8 +99,6 @@ signedMeterReadingsFor30Days.forEach(reading => {
 const ca = new CertificateAuthority();
 const signedManufacturerPk = ca.signManufacturerPk(meterManufacturerObj.getManufacturerPk(), meterManufacturerObj.getManufacturerId());
 signedManufacturerPk.verify(ca.getCaPk());
-log(`
-Time taken to verify meter readings signatures: ${performance.now() - verifyMeterReadingSigTimeStart}ms`);
+logData.push({ src: 'test_data_meter_readings', data: 'Verified meter reading signatures - time taken', value: (performance.now() - verifyMeterReadingSigTimeStart), datatype: 'ms' });
 
-console.timeEnd("OVERALL");
-logStreamStop("./test_output/test_data_meter_readings.out");
+csvWriter.writeRecords(logData).then(() => console.log('test_data_meter_readings logs-writing to file completed'));

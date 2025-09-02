@@ -14,6 +14,7 @@ import { customerSharesCircuit } from './zkPrograms/zkprogram_customer_shares.js
 import { perCustomerEmissionsCircuit } from './zkPrograms/zkprogram_per_customer_proof.js';
 import { CUSTOMER_SHARES_TOTAL, NUM_OF_VERIFIER } from './types/customer.js';
 import { log, logStreamStart, logStreamStop } from './utils/util.js';
+import { createObjectCsvWriter } from 'csv-writer';
 
 // TODO: create a lookup map
 // publicInput indices:
@@ -42,9 +43,17 @@ if (!fs.existsSync(path)) {
     });
 }
 const logFile = path + '/verifier_main.out';
-logStreamStart(logFile);
+const csvWriter = createObjectCsvWriter({
+    path: logFile,
+    header: [
+        {id: 'src', title: 'src_file'},
+        {id: 'data', title: 'data'},
+        {id: 'value', title: 'value'},
+        {id: 'datatype', title: 'data_type'},
+    ]
+});
+let logData = [];
 
-log(`Verifier_main, Starts\n`);
 const verifierTimeStart = performance.now();
 
 const customerIds: Field[] = [Field(0), Field(1), Field(2), Field(3), Field(4), Field(5), Field(6)];
@@ -58,7 +67,7 @@ const intensityCAPk = PublicKey.fromJSON(intensityCAPkRaw);
 const meterPk = PublicKey.fromJSON(meterPkRaw);
 const gridOperatorPk = PublicKey.fromJSON(gridOperatorPkRaw);
 
-const customerEmissionsData = fs.readFileSync("customer_records/customer_emissions.json", 'utf8');
+const customerEmissionsData = fs.readFileSync("./generated_customer_records/customer_emissions.json", 'utf8');
 const customerEmissionsJson = JSONParse(customerEmissionsData);
 
 // The emissions were inflated to the sum of 2^64, to get the read emissions figures in gCO2e, 
@@ -73,15 +82,15 @@ for (let i=0; i<customerEmissionsJson.length; i++) {
 // const verificationKeyData = fs.readFileSync('verification_key.txt');
 const compileTotalEmissions = performance.now();
 const totalEmissionsVk = (await totalEmissionsCircuit.compile()).verificationKey;
-log(`Verifier_main, compilation_total_emissions, time, ${performance.now() - compileTotalEmissions}\n`);
+logData.push({ src: 'verifier_main', data: 'Total emissions circuit compilation - time taken', value: (performance.now() - compileTotalEmissions), datatype: 'ms' });
 
 const compileCustomerShares = performance.now();
 const customerTreeCircuitVk = (await customerSharesCircuit.compile()).verificationKey;
-log(`Verifier_main, compilation_customer_shares, time, ${performance.now() - compileCustomerShares}\n`);
+logData.push({ src: 'verifier_main', data: 'Customer shares circuit compilation - time taken', value: (performance.now() - compileCustomerShares), datatype: 'ms' });
 
 const compilePerCustomer = performance.now();
 const perCustomerProofVk = (await perCustomerEmissionsCircuit.compile()).verificationKey;
-log(`Verifier_main, compilation_per_customer_emissions, time, ${performance.now() - compilePerCustomer}\n`);
+logData.push({ src: 'verifier_main', data: 'Per-customer emissions circuit compilation - time taken', value: (performance.now() - compilePerCustomer), datatype: 'ms' });
 
 for (let i = 0; i < NUM_OF_VERIFIER; i++) {
     const proofData = fs.readFileSync("emissions_proof_" + customerIds[i] + ".json", 'utf8');
@@ -109,9 +118,14 @@ for (let i = 0; i < NUM_OF_VERIFIER; i++) {
     const verifyOneCustomer = performance.now();
     let cpuStart = process.cpuUsage();
     const ok = await verify(proofJson, perCustomerProofVk);
-    log(`Verifier_main, one_customer, time, ${performance.now() - verifyOneCustomer}, cpuUsage, ${process.cpuUsage(cpuStart).user}, memUsage, ${process.memoryUsage().rss}\n`);
+    logData.push({ src: 'verifier_main', data: 'Verified one customer proof - time taken', value: (performance.now() - verifyOneCustomer), datatype: 'ms' });
+    logData.push({ src: 'verifier_main', data: 'Verified one customer proof - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
+    logData.push({ src: 'verifier_main', data: 'Verified one customer proof - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
+
     assert(ok);
     // Sign the tree root hash using a simulated financial audior key and verify it here.
 }
-log(`Verifier_main, Ends, time, ${performance.now() - verifierTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
-logStreamStop(logFile);
+logData.push({ src: 'verifier_main', data: 'Verified ' + NUM_OF_VERIFIER + ' customer proofs overall - time taken', value: (performance.now() - verifierTimeStart), datatype: 'ms' });
+logData.push({ src: 'verifier_main', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
+logData.push({ src: 'verifier_main', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
+csvWriter.writeRecords(logData).then(() => console.log('verifier_main logs-writing to file completed'));
