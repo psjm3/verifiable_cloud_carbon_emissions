@@ -59,18 +59,18 @@ if (cluster.isPrimary) {
     }
     const logFile = path + '/proof_workers_total_emissions_step.out';
     let csvWriter: CsvWriter<ObjectMap<any>>;
-    // if (fs.existsSync(logFile)) {
-    //     csvWriter = createObjectCsvWriter({
-    //         append: true,
-    //         path: logFile,
-    //         header: [
-    //             { id: 'src', title: 'src_file' },
-    //             { id: 'data', title: 'data' },
-    //             { id: 'value', title: 'value' },
-    //             { id: 'datatype', title: 'data_type' },
-    //         ]
-    //     });
-    // } else {
+    if (fs.existsSync(logFile)) {
+        csvWriter = createObjectCsvWriter({
+            append: true,
+            path: logFile,
+            header: [
+                { id: 'src', title: 'src_file' },
+                { id: 'data', title: 'data' },
+                { id: 'value', title: 'value' },
+                { id: 'datatype', title: 'data_type' },
+            ]
+        });
+    } else {
         csvWriter = createObjectCsvWriter({
             path: logFile,
             header: [
@@ -80,7 +80,7 @@ if (cluster.isPrimary) {
                 { id: 'datatype', title: 'data_type' },
             ]
         });
-    // }
+    }
     let logData = [];
     const proofWorkersTimeStart = performance.now();
 
@@ -120,11 +120,11 @@ if (cluster.isPrimary) {
         logData.push({ src: 'proof_workers_total_emissions_step', data: 'proof of one total emissions STEP batch at level ' + parseInt(process.env.subtreeRootLevel) + ' from index ' + inputNodeIndex + ' - time taken', value: (performance.now() - proofWorkersTimeStart), datatype: 'ms' })
         logData.push({ src: 'proof_workers_total_emissions_step', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
         logData.push({ src: 'proof_workers_total_emissions_step', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
-        csvWriter.writeRecords(logData).then(() => console.log('proof_workers_total_emissions_step logs-writing to file completed'));
     }).catch(err => {
         logData.push({ src: 'proof_workers_total_emissions_step', data: 'ERROR: error writing to ./generated_proofs/total_emissions_proof_' + parentOfSubtreeLevel + '_' + inputNodeIndex + '.json', value: err, datatype: 'text' })
         csvWriter.writeRecords(logData).then(() => console.log('proof_workers_total_emissions_step logs-writing to file completed'));
         process.exit(1);
     });
+    await csvWriter.writeRecords(logData).then(() => console.log('proof_workers_total_emissions_step logs-writing to file completed'));
     process.exit(0);
 }

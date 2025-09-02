@@ -11,8 +11,8 @@ export { Witness, MerkleTreeWithSums, MerkleWitnessWithSums, BaseMerkleWitnessWi
 // Alternative is to move the Merkle tree witness definitions into the 
 // customer data class.
 // TODO: Make this into a class and set these via a static function
-export const NUM_OF_CUSTOMERS = 8;
-export const BATCH_NUM_OF_CUSTOMERS = 4;
+export const NUM_OF_CUSTOMERS = 32;
+export const BATCH_NUM_OF_CUSTOMERS = 8;
 
 // Number of proofs required is 2^treeHeight - 1, and we need to have all the proofs to the root.
 // The nodes that haven't got any customer data will have to be constructed using dummy Field(0) 

@@ -35,6 +35,8 @@ if (cluster.isPrimary) {
         }
     });
 } else {
+    let batchIdx = parseInt(process.env.startIdx)
+
     const path = './generated_logs';
     if (!fs.existsSync(path)) {
         fsAsync.mkdir(
@@ -46,18 +48,18 @@ if (cluster.isPrimary) {
     }
     const logFile = path + '/proof_workers_customer_shares_base.out';
     let csvWriter: CsvWriter<ObjectMap<any>>;
-    // if (fs.existsSync(logFile)) {
-    //     csvWriter = createObjectCsvWriter({
-    //         append: true,
-    //         path: logFile,
-    //         header: [
-    //             { id: 'src', title: 'src_file' },
-    //             { id: 'data', title: 'data' },
-    //             { id: 'value', title: 'value' },
-    //             { id: 'datatype', title: 'data_type' },
-    //         ]
-    //     });
-    // } else {
+    if (fs.existsSync(logFile)) {
+        csvWriter = createObjectCsvWriter({
+            append: true,
+            path: logFile,
+            header: [
+                { id: 'src', title: 'src_file' },
+                { id: 'data', title: 'data' },
+                { id: 'value', title: 'value' },
+                { id: 'datatype', title: 'data_type' },
+            ]
+        });
+    } else {
         csvWriter = createObjectCsvWriter({
             path: logFile,
             header: [
@@ -67,11 +69,10 @@ if (cluster.isPrimary) {
                 { id: 'datatype', title: 'data_type' },
             ]
         });
-    // }
+    }
     let logData = [];
     const proofWorkersTimeStart = performance.now();
 
-    let batchIdx = parseInt(process.env.startIdx)
     const recordsInSubTree: Customer[] = customerRecords.slice(batchIdx, batchIdx + BATCH_NUM_OF_CUSTOMERS);
     const subTree: MerkleTreeWithSums = customerDataObj.generateBatchedSubTree(recordsInSubTree);
 
@@ -105,11 +106,12 @@ if (cluster.isPrimary) {
         logData.push({ src: 'proof_workers_customer_shares_base', data: 'proof of one customer shares BASE batch from index ' + batchIdx + ' - time taken', value: (performance.now() - proofWorkersTimeStart), datatype: 'ms' })
         logData.push({ src: 'proof_workers_customer_shares_base', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
         logData.push({ src: 'proof_workers_customer_shares_base', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
-        csvWriter.writeRecords(logData).then(() => console.log('proof_workers_customer_shares_base logs-writing to file completed'));
-        process.exit(0);
     }).catch(err => {
         logData.push({ src: 'proof_workers_customer_shares_base', data: 'ERROR: error writing to ./generated_proofs/subtree_proof_' + subtreeRootLevel + '_' + subtreeRootIdx + '.json', value: err, datatype: 'text' })
         csvWriter.writeRecords(logData).then(() => console.log('proof_workers_customer_shares_base logs-writing to file completed'));
         process.exit(1);
     });
+    // csvWriter.writeRecords(logData).then(() => console.log('proof_workers_customer_shares_base logs-writing to file completed'));
+    await csvWriter.writeRecords(logData).then(() => console.log('proof_workers_customer_shares_base logs-writing to file completed'));
+    process.exit(0);
 }

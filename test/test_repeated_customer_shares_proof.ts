@@ -75,7 +75,7 @@ async function customerSharesProofsRunner() {
 /******************/
 await createArtifactFolders();
 
-for (let i = 0; i < 5; i++) {
+for (let i = 0; i < 1; i++) {
     logData.push({ src: 'test_repeated_customer_shares_proof', data: 'Running customer shares proof for ' + NUM_OF_CUSTOMERS + ' iteration ', value: i, datatype: 'number' });
 
     const customerSharesTimeStart = performance.now();
