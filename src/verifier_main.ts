@@ -1,16 +1,20 @@
+import fs from 'fs';
+import fsAsync from 'fs/promises';
+
 import {
     Bool,
     Field,
     PublicKey,
     verify
 } from 'o1js';
-import fs from 'fs';
 import { JSONParse } from 'json-with-bigint';
 import { strict as assert } from 'assert'
 import { totalEmissionsCircuit } from './zkPrograms/zkprogram_total_emissions.js';
 import { customerSharesCircuit } from './zkPrograms/zkprogram_customer_shares.js';
 import { perCustomerEmissionsCircuit } from './zkPrograms/zkprogram_per_customer_proof.js';
 import { CUSTOMER_SHARES_TOTAL, NUM_OF_VERIFIER } from './types/customer.js';
+import { log, logStreamStart, logStreamStop } from './utils/util.js';
+import { createObjectCsvWriter } from 'csv-writer';
 
 // TODO: create a lookup map
 // publicInput indices:
@@ -29,7 +33,28 @@ import { CUSTOMER_SHARES_TOTAL, NUM_OF_VERIFIER } from './types/customer.js';
 /****************************/
 /***** Public Witnesses *****/
 /****************************/
-console.time("OVERALL TIME TAKEN FOR THE VERIFICATION")
+const path = './generated_logs';
+if (!fs.existsSync(path)) {
+    fsAsync.mkdir(
+        path, { recursive: true }
+    ).catch(err => {
+        console.error(`ERROR: Verifier_main, Error creating directory for ${path}: ${err}\n`);
+        process.exit(1);
+    });
+}
+const logFile = path + '/verifier_main.out';
+const csvWriter = createObjectCsvWriter({
+    path: logFile,
+    header: [
+        {id: 'src', title: 'src_file'},
+        {id: 'data', title: 'data'},
+        {id: 'value', title: 'value'},
+        {id: 'datatype', title: 'data_type'},
+    ]
+});
+let logData = [];
+
+const verifierTimeStart = performance.now();
 
 const customerIds: Field[] = [Field(0), Field(1), Field(2), Field(3), Field(4), Field(5), Field(6)];
 const smartMeterCAPkRaw = fs.readFileSync('./generated_public_keys/pk_CA_meter.json', 'utf8');
@@ -42,7 +67,7 @@ const intensityCAPk = PublicKey.fromJSON(intensityCAPkRaw);
 const meterPk = PublicKey.fromJSON(meterPkRaw);
 const gridOperatorPk = PublicKey.fromJSON(gridOperatorPkRaw);
 
-const customerEmissionsData = fs.readFileSync("customer_records/customer_emissions.json", 'utf8');
+const customerEmissionsData = fs.readFileSync("./generated_customer_records/customer_emissions.json", 'utf8');
 const customerEmissionsJson = JSONParse(customerEmissionsData);
 
 // The emissions were inflated to the sum of 2^64, to get the read emissions figures in gCO2e, 
@@ -55,28 +80,26 @@ for (let i=0; i<customerEmissionsJson.length; i++) {
 // I think that the verifier needs to generate the verification key themselves, otherwise the prover
 // could provide an arbitrary circuit and proof and it will be checked out!
 // const verificationKeyData = fs.readFileSync('verification_key.txt');
-console.time("compileTotalEmissions");
+const compileTotalEmissions = performance.now();
 const totalEmissionsVk = (await totalEmissionsCircuit.compile()).verificationKey;
-console.timeEnd("compileTotalEmissions");
+logData.push({ src: 'verifier_main', data: 'Total emissions circuit compilation - time taken', value: (performance.now() - compileTotalEmissions), datatype: 'ms' });
 
-console.time("compileCustomerSharesProof");
+const compileCustomerShares = performance.now();
 const customerTreeCircuitVk = (await customerSharesCircuit.compile()).verificationKey;
-console.timeEnd("compileCustomerSharesProof")
+logData.push({ src: 'verifier_main', data: 'Customer shares circuit compilation - time taken', value: (performance.now() - compileCustomerShares), datatype: 'ms' });
 
-console.time("compilePerCustomerProof");
+const compilePerCustomer = performance.now();
 const perCustomerProofVk = (await perCustomerEmissionsCircuit.compile()).verificationKey;
-console.timeEnd("compilePerCustomerProof");
+logData.push({ src: 'verifier_main', data: 'Per-customer emissions circuit compilation - time taken', value: (performance.now() - compilePerCustomer), datatype: 'ms' });
 
 for (let i = 0; i < NUM_OF_VERIFIER; i++) {
     const proofData = fs.readFileSync("emissions_proof_" + customerIds[i] + ".json", 'utf8');
     const proofJson = await JSON.parse(proofData);
 
-    console.log("Verify that the customer ID is as expected");
     assert.equal(customerIds[i].toString(), proofJson["publicInput"][0]);
 
     // Verify that the revealed CA pks from the prover's output are the same as what are disclosed, 
     // maybe by asking the certificate authority or they might be public knowledge already.
-    console.log("Verify that the CA pks from the prover's output match with the expected values");
     assert.equal(smartMeterCAPk.x.toJSON(), proofJson["publicInput"][6]);
     smartMeterCAPk.isOdd.assertEquals(Bool(proofJson["publicInput"][7]));
     
@@ -89,20 +112,20 @@ for (let i = 0; i < NUM_OF_VERIFIER; i++) {
     assert.equal(gridOperatorPk.x.toJSON(), proofJson["publicInput"][13]);
     gridOperatorPk.isOdd.assertEquals(Bool(proofJson["publicInput"][14]));
 
-    console.log("Verify that the emissions for this customer is as expected");
     const emissions_in_gco2e = BigInt(proofJson["publicOutput"][0]) / CUSTOMER_SHARES_TOTAL;
     assert.equal(realCustomerEmissions[i], emissions_in_gco2e);
 
-    console.log("Verify emissions proof and signature of tree root hash for customer", customerIds[i].toString());
-
-    console.time("verProof");
+    const verifyOneCustomer = performance.now();
     let cpuStart = process.cpuUsage();
     const ok = await verify(proofJson, perCustomerProofVk);
-    console.log("Just the verification cpu time:", process.cpuUsage(cpuStart), "memory:", process.memoryUsage());
-    console.timeEnd('verProof');
-    console.log('Proof ok?', ok);
+    logData.push({ src: 'verifier_main', data: 'Verified one customer proof - time taken', value: (performance.now() - verifyOneCustomer), datatype: 'ms' });
+    logData.push({ src: 'verifier_main', data: 'Verified one customer proof - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
+    logData.push({ src: 'verifier_main', data: 'Verified one customer proof - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
+
     assert(ok);
     // Sign the tree root hash using a simulated financial audior key and verify it here.
 }
-console.timeEnd("OVERALL TIME TAKEN FOR THE VERIFICATION")
-console.log("Verifier Main", process.pid, "CPU usage:", process.cpuUsage());
+logData.push({ src: 'verifier_main', data: 'Verified ' + NUM_OF_VERIFIER + ' customer proofs overall - time taken', value: (performance.now() - verifierTimeStart), datatype: 'ms' });
+logData.push({ src: 'verifier_main', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
+logData.push({ src: 'verifier_main', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
+csvWriter.writeRecords(logData).then(() => console.log('verifier_main logs-writing to file completed'));

@@ -5,6 +5,7 @@ import { SignedMeterPk } from "../types/smartmeter_manufactorer.js";
 import { SmartMeterProperties } from "../types/meter_readings.js";
 import * as crypto from "crypto";
 import fs from 'fs/promises';
+import { log } from "../utils/util.js";
 
 export class SmartMeterManufacturer {
     private manufacturerId: Field;
@@ -56,21 +57,16 @@ export class SmartMeterManufacturer {
 
     // Serialise the serial number of the meter, secret key, public key and the public key+serial number signature from the manufacturer
     async createSmartMeter() {
-        // Use hashed meter id for the signature
-        // const signedSmartMeterPk: SignedMeterPk = manufacturer.signSmartMeterPublicKey(this.smartMeterPublicKey, this.id);
-
         const props = new SmartMeterProperties({
             id: this.meterId,
             secretKey: this.meterSecretKey,
             publicKey: this.meterPublicKey,
-            // smartMeterSignature: signedSmartMeterPk,
-            // manufacturerId: manufacturer.getId()
         });
 
         await fs.writeFile(
             "./generated_smart_meters/properties_" + this.meterId.toString() + ".json", props.toJSON()
         ).catch(err => {
-            console.error('Error writing file:', err);
+            console.log(`ERROR: data_customer, error writing to ./generated_smart_meters/properties_${this.meterId.toString()}.json: ${err}\n`);
             process.exit(1);
         });
     }
