@@ -40,10 +40,8 @@ npm install typescript --save-dev
 
 ### Node.js modules required
 ```shell
-npm install tsx
-npm install o1js@2.8.0
-npm install json-with-bigint@3.4.4
-```
+npm install
+``` 
 
 ## Run Provers
 Before running any of the provers, review the following constants first:
