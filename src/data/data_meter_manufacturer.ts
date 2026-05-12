@@ -66,7 +66,7 @@ export class SmartMeterManufacturer {
         await fs.writeFile(
             "./generated_smart_meters/properties_" + this.meterId.toString() + ".json", props.toJSON()
         ).catch(err => {
-            console.log(`ERROR: data_customer, error writing to ./generated_smart_meters/properties_${this.meterId.toString()}.json: ${err}\n`);
+            log(`ERROR: data_customer, error writing to ./generated_smart_meters/properties_${this.meterId.toString()}.json: ${err}\n`);
             process.exit(1);
         });
     }

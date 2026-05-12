@@ -6,9 +6,7 @@ import { CertificateAuthority } from "../src/data/data_certificate_authority.js"
 import { GridOperator } from "../src/data/data_grid_operator.js";
 import { SignedIntensityFactor } from "../src/types/carbon_intensity_factor.js";
 import { TEST_PERIOD_FROM_TIMESTAMP, TEST_PERIOD_TO_TIMESTAMP } from "../src/data/data_timestamps.js";
-import { createObjectCsvWriter } from 'csv-writer';
-import { CsvWriter } from 'csv-writer/src/lib/csv-writer.js';
-import { ObjectMap } from 'csv-writer/src/lib/lang/object.js';
+import { log, logStreamStart, logStreamStop } from '../src/utils/util.js';
 
 let path = './test_output'
 if (!fs.existsSync(path)) {
@@ -19,31 +17,7 @@ if (!fs.existsSync(path)) {
         process.exit(1);
     });
 }
-const logFile = path + '/test_data_carbon_intensity.out';
-let csvWriter : CsvWriter<ObjectMap<any>>;
-if (fs.existsSync(logFile)) {
-    csvWriter = createObjectCsvWriter({
-        append: true,
-        path: logFile,
-        header: [
-            {id: 'src', title: 'src_file'},
-            {id: 'data', title: 'data'},
-            {id: 'value', title: 'value'},
-            {id: 'datatype', title: 'data_type'},
-        ]
-    });
-} else {
-    csvWriter = createObjectCsvWriter({
-        path: logFile,
-        header: [
-            {id: 'src', title: 'src_file'},
-            {id: 'data', title: 'data'},
-            {id: 'value', title: 'value'},
-            {id: 'datatype', title: 'data_type'},
-        ]
-    }); 
-}
-let logData = [];
+logStreamStart("./test_output/test_data_carbon_intensity.out");
 
 const ca = new CertificateAuthority();
 const gridOperatorObj = new GridOperator();
@@ -53,15 +27,17 @@ const intensityFor30Days: SignedIntensityFactor[] = await gridOperatorObj.getSig
     TEST_PERIOD_FROM_TIMESTAMP, 
     TEST_PERIOD_TO_TIMESTAMP
 );
-logData.push({ src: 'test_data_carbon_intensity', data: 'Get 30 days signed intensity factors - time taken', value: (performance.now() - getIntensityTimeStart), datatype: 'ms' });
+log(`
+Time taken to sign 30 days intensity factors: ${performance.now() - getIntensityTimeStart}ms`);
 
 intensityFor30Days.forEach((intensity, idx) => {
-    logData.push({ src: 'test_data_carbon_intensity', data: 'Intensity data' + idx, value: new Date(Number(intensity.timeFrom.toBigInt())), datatype: 'number' });
+log(`
+Intensity data ${idx}: ${new Date(Number(intensity.timeFrom.toBigInt()))}`);
 });
 
-
 // 30 days of half-hourly readings should have 1440 readings in total
-logData.push({ src: 'test_data_carbon_intensity', data: 'Number of intensity generated', value: intensityFor30Days.length, datatype: 'number' });
+log(`
+Number of intensity generated: ${intensityFor30Days.length}`);
 assert(intensityFor30Days.length == 1440);
 
 const gridOperatorPk = gridOperatorObj.getGridOperatorPk();
@@ -75,7 +51,8 @@ signedGridOperatorPk.pkSig.verify(
     ca.getCaPk(), 
     ca.getCaPk().toFields().concat(
         signedGridOperatorPk.pk.toFields().concat(gridOperatorId))).assertTrue();
-logData.push({ src: 'test_data_carbon_intensity', data: 'Verified grid operator public key signature - time taken', value: (performance.now() - verifyGridOperatorPkTimeStart), datatype: 'ms' });
+log(`
+Time taken to verify 30 intensity signatures: ${performance.now() - verifyGridOperatorPkTimeStart}ms`);
 
 // verify all intensity factors
 const verifyIntensityTimeStart = performance.now();
@@ -85,5 +62,6 @@ intensityFor30Days.forEach((intensity) => {
         signedGridOperatorPk.pk.toFields().concat(
             [intensity.intensity, intensity.timeFrom, intensity.timeTo])).assertTrue();
 });
-logData.push({ src: 'test_data_carbon_intensity', data: 'Verified 30 days intensity signatures - time taken', value: (performance.now() - verifyIntensityTimeStart), datatype: 'ms' });
-csvWriter.writeRecords(logData).then(() => console.log('test_data_carbon_intensity logs-writing to file completed'));
+log(`
+Time taken to verify 30 intensity signatures: ${performance.now() - verifyIntensityTimeStart}ms`);
+logStreamStop("./test_output/test_data_carbon_intensity.out");

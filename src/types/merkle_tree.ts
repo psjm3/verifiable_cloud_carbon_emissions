@@ -5,14 +5,15 @@
 import { Bool, Field, FlexibleProvable, Poseidon, Provable, Struct } from "o1js";
 import { Invoice } from "./invoice.js";
 export { Witness, MerkleTreeWithSums, MerkleWitnessWithSums, BaseMerkleWitnessWithSums };
+import { DatabaseSync } from 'node:sqlite';
 
 // These constants need to be set here because the provable Merkle tree witness class requires to 
 // have a fixed size array and the size depends on the tree height.
 // Alternative is to move the Merkle tree witness definitions into the 
 // customer data class.
 // TODO: Make this into a class and set these via a static function
-export const NUM_OF_CUSTOMERS = 32;
-export const BATCH_NUM_OF_CUSTOMERS = 8;
+export const NUM_OF_CUSTOMERS = 256;
+export const BATCH_NUM_OF_CUSTOMERS = 128;
 
 // Number of proofs required is 2^treeHeight - 1, and we need to have all the proofs to the root.
 // The nodes that haven't got any customer data will have to be constructed using dummy Field(0) 
@@ -22,8 +23,37 @@ export const BATCH_NUM_OF_CUSTOMERS = 8;
 // number of leafs L = (number of nodes N + 1)/2
 // N = (2^tree height H) - 1
 // therefore L = 2^(H-1)
-export const TREE_HEIGHT = Math.ceil(Math.log2(NUM_OF_CUSTOMERS))+1;
-export const TREE_NUM_OF_LEAFS = 2**(TREE_HEIGHT-1);
+export const TREE_HEIGHT = Math.ceil(Math.log2(NUM_OF_CUSTOMERS)) + 1;
+export const TREE_NUM_OF_LEAFS = 2 ** (TREE_HEIGHT - 1);
+
+// Persist Merkle tree to SQLite Db
+const db = new DatabaseSync('./customer_merkle_tree.db');
+db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_merkle_tree(
+        tree_level INTEGER,
+        tree_node_index INTEGER,
+        hash TEXT,
+        totalCustomerShares TEXT,
+        totalResourceCharges TEXT,
+        totalOtherCharges TEXT,
+        ratioLowerBound TEXT,
+        ratioUpperBound TEXT,
+        UNIQUE(tree_level, tree_node_index) ON CONFLICT REPLACE
+    )
+`);
+// Create a prepared statement to insert data into the database.
+const insert = db.prepare(`
+    INSERT INTO customer_merkle_tree (
+        tree_level,
+        tree_node_index,
+        hash,
+        totalCustomerShares,
+        totalResourceCharges,
+        totalOtherCharges,
+        ratioLowerBound,
+        ratioUpperBound
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
 
 export class NodeContent extends Struct({
     hash: Field,
@@ -32,10 +62,10 @@ export class NodeContent extends Struct({
     totalOtherCharges: Field,
     ratioLowerBound: Field,
     ratioUpperBound: Field
-}) { 
+}) {
     toJSON(): string {
         return JSON.stringify({
-            "hash": this.hash.toJSON(), 
+            "hash": this.hash.toJSON(),
             "totalCustomerShares": this.totalCustomerShares.toJSON(),
             "totalResourceCharges": this.totalResourceCharges.toJSON(),
             "totalOtherCharges": this.totalOtherCharges.toJSON(),
@@ -83,8 +113,8 @@ class MerkleTreeWithSums {
             this.zeroes[i] = new NodeContent({
                 hash: Poseidon.hash([this.zeroes[i - 1].hash, this.zeroes[i - 1].hash]),
                 totalCustomerShares: this.zeroes[i - 1].totalCustomerShares.add(this.zeroes[i - 1].totalCustomerShares),
-                totalResourceCharges: this.zeroes[i-1].totalResourceCharges.add(this.zeroes[i-1].totalResourceCharges),
-                totalOtherCharges: this.zeroes[i-1].totalOtherCharges.add(this.zeroes[i-1].totalOtherCharges),
+                totalResourceCharges: this.zeroes[i - 1].totalResourceCharges.add(this.zeroes[i - 1].totalResourceCharges),
+                totalOtherCharges: this.zeroes[i - 1].totalOtherCharges.add(this.zeroes[i - 1].totalOtherCharges),
                 ratioLowerBound: Invoice.acceptableLowerBound, // set this to the known value for all the nodes
                 ratioUpperBound: Invoice.acceptableUpperBound  // set this to the known value for all the nodes
             });
@@ -107,6 +137,19 @@ class MerkleTreeWithSums {
      */
     getNode(level: number, index: bigint): NodeContent {
         return this.nodes[level]?.[index.toString()] ?? this.zeroes[level];
+    }
+
+    /**
+     * Returns a node from the SQLite database that stores the entire Merkle tree, at a given index and level.
+     * @param level Level of the node.
+     * @param index Index of the node.
+     * @returns The data of the node.
+     */
+    getNodeFromDb(db: DatabaseSync, level: number, index: bigint): NodeContent {
+        const query = db.prepare('SELECT * from customer_merkle_tree where tree_level='+level+' and tree_node_index='+index);
+        const queryResult = query.get();
+        return NodeContent.fromJSON(queryResult);
+        // return this.nodes[level]?.[index.toString()] ?? this.zeroes[level];
     }
 
     /**
@@ -156,7 +199,6 @@ class MerkleTreeWithSums {
             left.ratioLowerBound.assertEquals(right.ratioLowerBound);
             left.ratioUpperBound.assertEquals(right.ratioUpperBound);
 
-
             //debugLog(`merkle_tree, level, ${level}, index: ${currIndex}, hashing left, ${left.hash.toString()}, right, ${right.hash.toString()}`);
             let newNode = new NodeContent({
                 hash: Poseidon.hash([left.hash, right.hash]),
@@ -172,6 +214,67 @@ class MerkleTreeWithSums {
 
             this.setNode(level, currIndex, newNode);
         }
+    }
+
+    setLeafAndStoreToDb(index: bigint, leaf: NodeContent) {
+        if (index >= this.leafCount) {
+            throw new Error(`index ${index} is out of range for ${this.leafCount} leaves.`);
+        }
+        this.setNode(0, index, leaf);
+        //debugLog(`merkle_tree, level 0, index, ${index}, hash, ${leaf.hash.toString()}, sum, ${leaf.sum.toString()}`);
+        insert.run(
+            0,
+            index,
+            leaf.hash.toJSON(),
+            leaf.totalCustomerShares.toString(),
+            leaf.totalResourceCharges.toString(),
+            leaf.totalOtherCharges.toString(),
+            leaf.ratioLowerBound.toString(),
+            leaf.ratioUpperBound.toString()
+        );
+
+        let currIndex = index;
+        for (let level = 1; level < this.height; level++) {
+            currIndex /= 2n;
+
+            const left = this.getNode(level - 1, currIndex * 2n);
+            const right = this.getNode(level - 1, currIndex * 2n + 1n);
+
+            // assert that the ration lower and upper bounds are the same
+
+            left.ratioLowerBound.assertEquals(right.ratioLowerBound);
+            left.ratioUpperBound.assertEquals(right.ratioUpperBound);
+
+
+            //debugLog(`merkle_tree, level, ${level}, index: ${currIndex}, hashing left, ${left.hash.toString()}, right, ${right.hash.toString()}`);
+            let newNode = new NodeContent({
+                hash: Poseidon.hash([left.hash, right.hash]),
+                totalCustomerShares: left.totalCustomerShares.add(right.totalCustomerShares),
+                totalResourceCharges: left.totalResourceCharges.add(right.totalResourceCharges),
+                totalOtherCharges: left.totalOtherCharges.add(right.totalOtherCharges),
+                // The share to cost ratio lower and upper bounds are the same on all nodes
+                ratioLowerBound: left.ratioLowerBound,
+                ratioUpperBound: left.ratioUpperBound
+            });
+
+            //debugLog(`merkle_tree, level, ${level}, index, ${currIndex}, hash, ${newNode.hash.toString()}, sum, ${newNode.sum.toString()}`);
+
+            this.setNode(level, currIndex, newNode);
+            insert.run(
+                level,
+                currIndex,
+                newNode.hash.toString(),
+                newNode.totalCustomerShares.toString(),
+                newNode.totalResourceCharges.toString(),
+                newNode.totalOtherCharges.toString(),
+                newNode.ratioLowerBound.toString(),
+                newNode.ratioUpperBound.toString()
+            );
+        }
+    }
+
+    closeDb() {
+        db.close();
     }
 
     /**
@@ -217,8 +320,8 @@ class MerkleTreeWithSums {
             ratioUpperBound = node.sibling.ratioUpperBound;
         }
 
-        return hash.toString() === 
-            this.getRoot().hash.toString() && 
+        return hash.toString() ===
+            this.getRoot().hash.toString() &&
             totalCustomerShares.toString() === this.getRoot().totalCustomerShares.toString() &&
             totalResourceCharges.toString() === this.getRoot().totalResourceCharges.toString() &&
             totalOtherCharges.toString() === this.getRoot().totalOtherCharges.toString() &&
@@ -250,8 +353,8 @@ class MerkleTreeWithSums {
  * The {@link BaseMerkleWitness} class defines a circuit-compatible base class for [Merkle Witness](https://computersciencewiki.org/index.php/Merkle_proof).
  */
 class BaseMerkleWitnessWithSums extends Struct({
-    path: Provable.Array(NodeContent, TREE_HEIGHT-1),
-    isLeft: Provable.Array(Bool, TREE_HEIGHT-1)
+    path: Provable.Array(NodeContent, TREE_HEIGHT - 1),
+    isLeft: Provable.Array(Bool, TREE_HEIGHT - 1)
 }) {
     static height: number;
     // path: NodeContent[];
@@ -267,7 +370,7 @@ class BaseMerkleWitnessWithSums extends Struct({
      * @returns A circuit-compatible Witness.
      */
     constructor(witness: Witness) {
-        super({path:[], isLeft:[]});
+        super({ path: [], isLeft: [] });
         let height = witness.length + 1;
         if (height !== this.height()) {
             throw Error(
@@ -361,7 +464,7 @@ function MerkleWitnessWithSums(height: number): typeof BaseMerkleWitnessWithSums
 
 // swap two values if the boolean is false, otherwise keep them as they are
 // more efficient than 2x `Provable.if()` by reusing an intermediate variable
-function conditionalSwap(b: Bool, x: NodeContent, y: NodeContent): [ NodeContent, NodeContent ] {
+function conditionalSwap(b: Bool, x: NodeContent, y: NodeContent): [NodeContent, NodeContent] {
     let mHash = b.toField().mul(x.hash.sub(y.hash)); // b*(x - y)
     let mtotalCustomerShares = b.toField().mul(x.totalCustomerShares.sub(y.totalCustomerShares)); // b*(x - y)
     let mResourcesCostsSum = b.toField().mul(x.totalResourceCharges.sub(y.totalResourceCharges)); // b*(x - y)
