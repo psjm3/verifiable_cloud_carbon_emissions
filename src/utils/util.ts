@@ -2,7 +2,6 @@ import { createWriteStream } from "fs";
 
 let writableStream = null;
 let debug = false;
-export const DEBUG = false;
 
 // Output from measure_writablestream.ts suggests that it is more efficient
 // to create a write stream at the beginning of program (i.e. as a one-off) and 

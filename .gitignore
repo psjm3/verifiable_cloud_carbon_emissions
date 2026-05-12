@@ -7,6 +7,8 @@ out
 *.wasm
 **/*.wasm
 *.zkey
+*.db
+*.png
 witness
 *.wtns
 *.key

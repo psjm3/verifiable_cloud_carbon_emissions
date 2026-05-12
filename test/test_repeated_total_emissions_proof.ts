@@ -2,9 +2,7 @@ import { promisify } from 'util';
 import { exec } from 'child_process';
 import fs from 'fs';
 import fsAsync from 'fs/promises';
-import { createObjectCsvWriter } from 'csv-writer';
-import { CsvWriter } from 'csv-writer/src/lib/csv-writer.js';
-import { ObjectMap } from 'csv-writer/src/lib/lang/object.js';
+import { log, logStreamStart, logStreamStop } from '../src/utils/util.js';
 
 /***************/
 /* PREPARATION */
@@ -32,42 +30,26 @@ async function createArtifactFolders() {
     })
 }
 const logFile = "./test_logs/test_repeated_total_emissions_proof.out"
-let csvWriter : CsvWriter<ObjectMap<any>>;
-if (fs.existsSync(logFile)) {
-    csvWriter = createObjectCsvWriter({
-        append: true,
-        path: logFile,
-        header: [
-            {id: 'src', title: 'src_file'},
-            {id: 'data', title: 'data'},
-            {id: 'value', title: 'value'},
-            {id: 'datatype', title: 'data_type'},
-        ]
-    });
-} else {
-    csvWriter = createObjectCsvWriter({
-        path: logFile,
-        header: [
-            {id: 'src', title: 'src_file'},
-            {id: 'data', title: 'data'},
-            {id: 'value', title: 'value'},
-            {id: 'datatype', title: 'data_type'},
-        ]
-    }); 
-}
-let logData = [];
+logStreamStart(logFile);
 
 const testTimeStart = performance.now();
+log(`Test_repeated_total_emissions, Starts\n`);
 
 const totalEmissionsProofsExec = promisify(exec);
 async function totalEmissionsProofsRunner() {
     try {
-        await totalEmissionsProofsExec(
+        const { stdout, stderr } = await totalEmissionsProofsExec(
             'tsx ./src/provers/prover_total_emissions.ts',
             { maxBuffer: 512 * 1024 }
         );
+        if (stdout != "") {
+            log(`${stdout}\n`);
+        }
+        if (stderr != "") {
+            log(`${stderr}\n`);
+        }
     } catch (err) {
-        logData.push({ src: 'test_repeated_total_emissions_proof', data: 'ERROR: child process prover_total_emissions.ts', value: err, datatype: 'text' });
+        log(`ERROR: Prover_main, ${err}\n`);
     }
 }
 
@@ -77,15 +59,10 @@ async function totalEmissionsProofsRunner() {
 await createArtifactFolders();
 
 for (let i=0; i<5; i++) {
-    logData.push({ src: 'test_repeated_total_emissions_proof', data: 'Running total emissions proof iteration ', value: i, datatype: 'number' });
-
+    log(`Test_repeated_total_emissions, Running_total_emissions_proof_iteration, ${i}\n`)
     const totalEmissionsTimeStart = performance.now();
     await totalEmissionsProofsRunner();
-    logData.push({ src: 'test_repeated_total_emissions_proof', data: 'Completed one total emissions proof - Time taken', value: (performance.now() - totalEmissionsTimeStart), datatype: 'ms' });
-    logData.push({ src: 'test_repeated_total_emissions_proof', data: 'Completed one total emissions proof - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
-    logData.push({ src: 'test_repeated_total_emissions_proof', data: 'Completed one total emissions proof - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
+    log(`Test_repeated_total_emissions, Total_emissions_proof, iteration, ${i}, time, ${performance.now() - totalEmissionsTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
 }
-logData.push({ src: 'test_repeated_total_emissions_proof', data: 'Total emissions proof 5 times overall - time taken', value: (performance.now() - testTimeStart), datatype: 'ms' })
-logData.push({ src: 'test_repeated_total_emissions_proof', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
-logData.push({ src: 'test_repeated_total_emissions_proof', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
-csvWriter.writeRecords(logData).then(() => console.log('test_repeated_total_emissions_proof logs-writing to file completed'));
+log(`Test_repeated_total_emissions, Ends, time, ${performance.now() - testTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
+logStreamStop(logFile);

@@ -7,30 +7,30 @@ import { Field } from "o1js";
 import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums, NodeContent, NUM_OF_CUSTOMERS, TREE_HEIGHT, TREE_NUM_OF_LEAFS } from "../types/merkle_tree.js";
 import { Customer, CUSTOMER_SHARES_TOTAL } from "../types/customer.js";
 import { Invoice } from "../types/invoice.js";
-import { DEBUG, debugLog, log } from "../utils/util.js";
+import { debugLog, log } from "../utils/util.js";
 
 export class CustomerData {
     // A convenient function to randomly create consumption percent figures for a set number of customers.
     // In reality the customer ids are pre-assigned to each customer, here we can simply use the incremental
     // index as the customer ids.
     // Each customer is assigned a secure nonce to generate the hash on each node on the Merkle Tree
-    async generateCustomers(reportingPeriodFrom: number, reportingPeriodTo: number, logData: any[]): Promise<Customer[]> {
+    async generateCustomers(reportingPeriodFrom: number, reportingPeriodTo: number): Promise<Customer[]> {
         // Construct the set of customer records and serialise them to disc
         // In real life this would come from an internally managed database.
-        let path = './generated_customer_records/';
+        let path = './customer_records/';
 
         if (!fs.existsSync(path)) {
             await fsSync.mkdir(
                 path, { recursive: true }
             ).catch(err => {
-                logData.push({ src: 'data_customer', data: 'Error creating directory for ' + path, value: err, datatype: 'text' })
+                log(`ERROR: data_customer, error creating directory for ${path}: ${err}`);
                 process.exit(1);
             });
         }
         await fsSync.writeFile(
-            "./generated_customer_records/customer.json", "["
+            "./customer_records/customer.json", "["
         ).catch(err => {
-            logData.push({ src: 'data_customer', data: 'Error writing to ./generated_customer_records/customer.json', value: err, datatype: 'text' })
+            log(`ERROR: data_customer, error writing to ./customer_records/customer.json: ${err}\n`);
             process.exit(1);
         });
 
@@ -73,9 +73,7 @@ export class CustomerData {
             resourcesChargesAllocation.push(Field(resourcesCharges));
         }
 
-        if (DEBUG) {
-            logData.push({ src: 'data_customer', data: 'Sum of normalised customer shares', value: sumOfAllocatedShares, datatype: 'number' });
-        }
+        debugLog(`data_customer, Sum of normalised customer shares: ${sumOfAllocatedShares}`);
 
         // Due to rounding discrepencies, the sum is unlikely to be exactly the same as the target total,
         // so we are alter the last generated share to make the total.
@@ -123,24 +121,24 @@ export class CustomerData {
                 custRecord = ", " + customer[i].toJSON();
             }
             await fsSync.appendFile(
-                "./generated_customer_records/customer.json", custRecord
+                "./customer_records/customer.json", custRecord
             ).catch(err => {
-                logData.push({ src: 'data_customer', data: 'Error appending to ./generated_customer_records/customer.json', value: err, datatype: 'text' })
+                log(`ERROR: data_customer, error appending to ./customer_records/customer.json: ${err}\n`);
                 process.exit(1);
             });
         }
 
         await fsSync.appendFile(
-            "./generated_customer_records/customer.json", "]"
+            "./customer_records/customer.json", "]"
         ).catch(err => {
-            logData.push({ src: 'data_customer', data: 'Error appending to ./generated_customer_records/customer.json', value: err, datatype: 'text' })
+            log(`ERROR: data_customer, error appending to ./customer_records/customer.json: ${err}\n`);
             process.exit(1);
         });
 
         return customer;
     }
 
-    async generateCustomerEmissions(totalEmissions: Field, customers: Customer[], logData: any[]): Promise<Field[]> {
+    async generateCustomerEmissions(totalEmissions: Field, customers: Customer[]): Promise<Field[]> {
         let customerEmissionsAllocation = [];
         let sumOfAllocatedEmissions = Field(0);
 
@@ -155,26 +153,30 @@ export class CustomerData {
         let inflatedTotalEmissions = totalEmissions.toBigInt() * CUSTOMER_SHARES_TOTAL;
         if (sumOfAllocatedEmissions.toBigInt() != inflatedTotalEmissions) {
             let diff = inflatedTotalEmissions - sumOfAllocatedEmissions.toBigInt();
+            debugLog(`
+                data_customer, diff: ${diff.toString()}
+                last original customer emissions allocation: ${customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1].toString()}`);
+
             customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1] = customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1].add(Field(diff));
+            debugLog(`last new customer emissions allocation: ${customerEmissionsAllocation[NUM_OF_CUSTOMERS - 1].toString()}`);
         }
-        if (DEBUG) {
-            logData.push({ src: 'data_customer', data: 'Sum of the customer emissions', value: sumOfAllocatedEmissions.toString(), datatype: 'text' });
-        }
+        debugLog(`Sum of the customer emissions: ${sumOfAllocatedEmissions.toString()}`);
+
         // Construct the set of customer records and serialise them to disc
-        let path = './generated_customer_records';
+        let path = './customer_records';
 
         if (!fs.existsSync(path)) {
             await fsSync.mkdir(
                 path, { recursive: true }
             ).catch(err => {
-                logData.push({ src: 'data_customer', data: 'Error creating directory for ' + path, value: err, datatype: 'text' })
+                log(`ERROR: data_customer, error creating directory for ${path}: ${err}`);
                 process.exit(1);
             });
         }
         await fsSync.writeFile(
-            "./generated_customer_records/customer_emissions.json", "["
+            "./customer_records/customer_emissions.json", "["
         ).catch(err => {
-            logData.push({ src: 'data_customer', data: 'Error writing to ./generated_customer_records/customer_emissions.json', value: err, datatype: 'text' })
+            log(`ERROR: data_customer, error writing to ./customer_records/customer_emissions.json: ${err}\n`);
             process.exit(1);
         });
 
@@ -186,24 +188,24 @@ export class CustomerData {
                 custEmissions = ", " + customerEmissionsAllocation[i].toJSON();
             }
             await fsSync.appendFile(
-                "./generated_customer_records/customer_emissions.json", custEmissions
+                "./customer_records/customer_emissions.json", custEmissions
             ).catch(err => {
-                logData.push({ src: 'data_customer', data: 'Error appending to ./generated_customer_records/customer_emissions.json', value: err, datatype: 'text' })
+                log(`ERROR: data_customer, error appending to ./customer_records/customer_emissions.json: ${err}\n`);
                 process.exit(1);
             });
         }
 
         await fsSync.appendFile(
-            "./generated_customer_records/customer_emissions.json", "]"
+            "./customer_records/customer_emissions.json", "]"
         ).catch(err => {
-            logData.push({ src: 'data_customer', data: 'Error appending to ./generated_customer_records/customer_emissions.json', value: err, datatype: 'text' })
+            log(`ERROR: data_customer, error appending to ./customer_records/customer_emissions.json: ${err}\n`);
             process.exit(1);
         });
 
         return customerEmissionsAllocation;
     }
 
-    generateCustomerMerkleTree(customerRecords: Customer[], logData: any[]): MerkleTreeWithSums {
+    generateCustomerMerkleTree(customerRecords: Customer[]): MerkleTreeWithSums {
         let merkletreeTimeStart = performance.now();
         let tree = new MerkleTreeWithSums(TREE_HEIGHT);
 
@@ -229,7 +231,7 @@ export class CustomerData {
             }
             // Customer records passed in could be serialised JSON objects read from disc
             // Need to deserialise them using fromJSON for each object before getting the data. 
-            tree.setLeaf(BigInt(i), new NodeContent({
+            tree.setLeafAndStoreToDb(BigInt(i), new NodeContent({
                 hash: Customer.fromJSON(customerRecords[i]).hash(),
                 totalCustomerShares: Customer.fromJSON(customerRecords[i]).customerShares,
                 totalResourceCharges: Customer.fromJSON(customerRecords[i]).invoice.resourcesCharges,
@@ -238,11 +240,13 @@ export class CustomerData {
                 ratioUpperBound: Invoice.acceptableUpperBound
             }));
         }
-        logData.push({ src: 'data_customer', data: 'Create Merkle tree for ' + NUM_OF_CUSTOMERS + ' customers - time taken', value: (performance.now() - merkletreeTimeStart), datatype: 'ms' })
+        log(`data_customer, create_merkle_tree, time, ${performance.now() - merkletreeTimeStart}\n`)
+        tree.closeDb();
         return tree;
     }
 
     generateBatchedSubTree(customerRecords: Customer[]): MerkleTreeWithSums {
+        let batchedSubTreeTimeStart = performance.now()
         let tree = new MerkleTreeWithSums(Math.ceil(Math.log2(BATCH_NUM_OF_CUSTOMERS)) + 1);
 
         // The customer records are provided monthly
@@ -276,6 +280,7 @@ export class CustomerData {
                 ratioUpperBound: Invoice.acceptableUpperBound
             }));
         }
+        log(`data_customer, create_one_batch_subtree, time, ${performance.now() - batchedSubTreeTimeStart}\n`);
         return tree;
     }
 }

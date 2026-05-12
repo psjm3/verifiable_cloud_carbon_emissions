@@ -11,10 +11,7 @@ import { GridOperator } from "../data/data_grid_operator.js";
 import { SmartMeterData } from "../data/data_meter_reading.js";
 import { SmartMeterManufacturer } from "../data/data_meter_manufacturer.js";
 import { CARBON_INTENSITY_FROM_TIMESTAMP, CARBON_INTENSITY_TO_TIMESTAMP } from "../data/data_timestamps.js";
-import { DEBUG } from '../utils/util.js';
-import { createObjectCsvWriter } from 'csv-writer';
-import { CsvWriter } from 'csv-writer/src/lib/csv-writer.js';
-import { ObjectMap } from 'csv-writer/src/lib/lang/object.js';
+import { debugLog, log, logStreamStart, logStreamStop } from '../utils/util.js';
 
 const path = './generated_logs';
 if (!fs.existsSync(path)) {
@@ -26,32 +23,10 @@ if (!fs.existsSync(path)) {
     });
 }
 const logFile = path + '/prover_total_emissions.out';
-let csvWriter : CsvWriter<ObjectMap<any>>;
-if (fs.existsSync(logFile)) {
-    csvWriter = createObjectCsvWriter({
-        append: true,
-        path: logFile,
-        header: [
-            {id: 'src', title: 'src_file'},
-            {id: 'data', title: 'data'},
-            {id: 'value', title: 'value'},
-            {id: 'datatype', title: 'data_type'},
-        ]
-    });
-} else {
-    csvWriter = createObjectCsvWriter({
-        path: logFile,
-        header: [
-            {id: 'src', title: 'src_file'},
-            {id: 'data', title: 'data'},
-            {id: 'value', title: 'value'},
-            {id: 'datatype', title: 'data_type'},
-        ]
-    }); 
-}
-let logData = [];
+logStreamStart(logFile);
 
 const proverTotalEmissionsTimeStart = performance.now();
+log(`Prover_total_emissions, Starts\n`);
 
 async function generateTotalEmissionsProof(numOfIntensities: number) {
     // By using a separate to run batches of base proofs, and then recursively generate proofs for further up the 
@@ -63,22 +38,20 @@ async function generateTotalEmissionsProof(numOfIntensities: number) {
     let numOfWorkers = (numOfIntensities / BATCH_NUM_OF_INTENSITY) > numCPUs ? numCPUs : (numOfIntensities / BATCH_NUM_OF_INTENSITY);
     for (let i = 0; i < numOfIntensities - 1; i += (BATCH_NUM_OF_INTENSITY * numOfWorkers)) {
         async function baseProofsRunnerExec() {
-            try {
-                await baseProofsRunner('tsx ./src/proof_workers/proof_workers_total_emissions_base.ts ' + i + ' ' + numOfWorkers);
-            } catch (err) {
-                logData.push({ src: 'prover_total_emissions', data: 'ERROR: child process proof_workers_total_emissions_base.ts', value: err, datatype: 'text' })
+            const { stdout, stderr } = await baseProofsRunner('tsx ./src/proof_workers/proof_workers_total_emissions_base.ts ' + i + ' ' + numOfWorkers);
+            if (stdout != "") {
+                log(`${stdout}\n`);
+            }
+            if (stderr != "") {
+                log(`${stderr}\n`);
             }
         }
         const runTotalEmissionsBaseTimeStart = performance.now();
         await baseProofsRunnerExec();
-        logData.push({ 
-            src: 'prover_total_emissions', 
-            data: 'total emissions base proof one batch at iteraton ' + i + ' with number of workers ' + numOfWorkers + ' - time taken', 
-            value: (performance.now() - runTotalEmissionsBaseTimeStart), 
-            datatype: 'ms'
-        })
+        log(`Prover_total_emissions, base_proof_runner_one_batch, time, ${performance.now() - runTotalEmissionsBaseTimeStart}, iteration, ${i}, num_of_workers, ${numOfWorkers}\n`);
     }
-    logData.push({ src: 'prover_total_emissions', data: 'total emissions base proof overall - time taken', value: (performance.now() - baseTotalEmissionsTimeStart), datatype: 'ms' })
+    log(`Prover_total_emissions, total_emissions_base_overall, time, ${performance.now() - baseTotalEmissionsTimeStart}\n`);
+    
 
     // TODO: Handle the case when it  is not a complete tree
     const stepTotalEmissionsTimeStart = performance.now();
@@ -88,29 +61,27 @@ async function generateTotalEmissionsProof(numOfIntensities: number) {
 
     numOfWorkers = numOfWorkers / 2;
     for (let level = 0; level < levelsOfSums; level++) {
+        debugLog(`Prover_total_emissions, step_proof, level, ${level},  numOfWorkers, ${numOfWorkers}`);
         async function stepProofsRunnerExec() {
-            try {
-                await stepProofsRunner(
-                    'tsx ./src/proof_workers/proof_workers_total_emissions_step.ts ' +
-                    numOfWorkers + ' ' +
-                    0 + ' ' +
-                    level
-                );
-            } catch (err) {
-                logData.push({ src: 'prover_total_emissions', data: 'ERROR: child process proof_workers_total_emissions_step.ts', value: err, datatype: 'text' })
+            const { stdout, stderr } = await stepProofsRunner(
+                'tsx ./src/proof_workers/proof_workers_total_emissions_step.ts ' +
+                numOfWorkers + ' ' +
+                0 + ' ' +
+                level
+            );
+            if (stdout != "") {
+                log(`${stdout}\n`);
+            }
+            if (stderr != "") {
+                log(`${stderr}\n`);
             }
         }
         const runTotalEmissionsStepTimeStart = performance.now();
         await stepProofsRunnerExec();
-        logData.push({
-            src: 'prover_total_emissions',
-            data: 'total emissions step proof one batch at level ' + level + ' with number of workers ' + numOfWorkers + ' - time taken',
-            value: (performance.now() - runTotalEmissionsStepTimeStart),
-            datatype: 'ms'
-        })
+        log(`Prover_total_emissions, step_proof_runner_one_batch, time, ${performance.now() - runTotalEmissionsStepTimeStart}, level, ${level}, num_of_workers, ${numOfWorkers}\n`);
         numOfWorkers = numOfWorkers / 2;
     }
-    logData.push({ src: 'prover_total_emissions', data: 'total emissions step proof overall - time taken', value: (performance.now() - stepTotalEmissionsTimeStart), datatype: 'ms' })
+    log(`Prover_total_emissions, total_emissions_step_overall, time, ${performance.now() - stepTotalEmissionsTimeStart}\n`);
 }
 
 /************************/
@@ -124,12 +95,12 @@ const gridOperatorPk = gridOperatorObj.getGridOperatorPk();
 fsAsync.writeFile(
     "./generated_public_keys/grid_operator_id.json", gridOperatorId.toJSON()
 ).catch(err => {
-    logData.push({ src: 'prover_total_emissions', data: 'Error writing to ./generated_public_keys/grid_operator_id.json', value: err, datatype: 'text' })
+    log(`ERROR: Prover_total_emissions, Error writing to ./generated_public_keys/grid_operator_id.json: ${err}\n`);
 });
 fsAsync.writeFile(
     "./generated_public_keys/grid_operator_pk.json", gridOperatorPk.toJSON()
 ).catch(err => {
-    logData.push({ src: 'prover_total_emissions', data: 'Error writing to ./generated_public_keys/grid_operator_pk.json', value: err, datatype: 'text' })
+    log(`ERROR: Prover_total_emissions, Error writing to ./generated_public_keys/grid_operator_pk.json: ${err}\n`);
 });
 
 const meterManufacturerObj = new SmartMeterManufacturer();
@@ -138,12 +109,12 @@ const meterManufacturerPk = meterManufacturerObj.getManufacturerPk();
 fsAsync.writeFile(
     "./generated_public_keys/meter_manufacturer_id.json", meterManufacturerId.toJSON()
 ).catch(err => {
-    logData.push({ src: 'prover_total_emissions', data: 'Error writing to ./generated_public_keys/meter_manufacturer_id.json', value: err, datatype: 'text' })
+    log(`ERROR: Prover_total_emissions, Error writing to ./generated_public_keys/meter_manufacturer_id.json: ${err}\n`);
 });
 fsAsync.writeFile(
     "./generated_public_keys/meter_manufacturer_pk.json", meterManufacturerPk.toJSON()
 ).catch(err => {
-    logData.push({ src: 'prover_total_emissions', data: 'Error writing to ./generated_public_keys/meter_manufacturer_pk.json', value: err, datatype: 'text' })
+    log(`ERROR: Prover_total_emissions, Error writing to ./generated_public_keys/meter_manufacturer_pk.json: ${err}\n`);
 });
 
 await meterManufacturerObj.createSmartMeter();
@@ -155,17 +126,19 @@ const signedMeterPk = meterManufacturerObj.signSmartMeterPK();
 fsAsync.writeFile(
     "./generated_public_keys/signed_meter_pk.json", signedMeterPk.toJSON()
 ).catch(err => {
-    logData.push({ src: 'prover_total_emissions', data: 'Error writing to ../generated_public_keys/signed_meter_pk.json', value: err, datatype: 'text' })
+    log(`ERROR: Prover_total_emissions, Error writing to ./generated_public_keys/signed_meter_pk.json: ${err}\n`);
 });
 fsAsync.writeFile(
     "./generated_public_keys/meter_pk.json", smartMeterProps.publicKey.toJSON()
 ).catch(err => {
-    logData.push({ src: 'prover_total_emissions', data: 'Error writing to ./generated_public_keys/meter_pk.json', value: err, datatype: 'text' })
+    log(`ERROR: Prover_total_emissions, Error writing to ./generated_public_keys/meter_pk.jso: ${err}\n`);
+
 });
 fsAsync.writeFile(
     "./generated_public_keys/meter_id.json", smartMeterId.toJSON()
 ).catch(err => {
-    logData.push({ src: 'prover_total_emissions', data: 'Error writing to ./generated_public_keys/meter_id.json', value: err, datatype: 'text' })
+    log(`ERROR: Prover_total_emissions, Error writing to ./generated_public_keys/meter_id.json: ${err}\n`);
+
 });
 
 // Only get the intensity factors from the NESO API if needed a fresh set and only after the obtained data
@@ -180,7 +153,7 @@ if (REGENERATE_INTENSITY) {
         CARBON_INTENSITY_FROM_TIMESTAMP,
         CARBON_INTENSITY_TO_TIMESTAMP
     );
-    logData.push({ src: 'prover_total_emissions', data: 'get 30 days signed carbon intensity factore - time taken', value: (performance.now() - signIntensiyTimeStart), datatype: 'ms' })
+    log(`Prover_total_emissions, sign_30_days_intensity_factors, time, ${performance.now() - signIntensiyTimeStart}\n`);
 
     // Also need to serialise the signed intensity factors for the spawn prover processes.
     let intensitiesJson = [];
@@ -193,12 +166,12 @@ if (REGENERATE_INTENSITY) {
         })
     })
     fsAsync.writeFile(
-        "./generated_intensities/intensity_factors.json", JSON.stringify(intensitiesJson)
+        "./src/data/intensity_factors.json", JSON.stringify(intensitiesJson)
     ).catch(err => {
-        logData.push({ src: 'prover_total_emissions', data: 'Error writing to ./generated_intensities/intensity_factors.json', value: err, datatype: 'text' })
+        log(`ERROR: Prover_total_emissions, Error writing to ./src/data/intensity_factors.json: ${err}`);
     });
 } else {
-    let intensitiesRaw = await fsAsync.readFile('./generated_intensities/intensity_factors.json', 'utf8');
+    let intensitiesRaw = await fsAsync.readFile('./src/data/intensity_factors.json', 'utf8');
     let signedIntensityFor30DaysSerialised = JSON.parse(intensitiesRaw) as SignedIntensityFactor[];
     signedIntensityFor30DaysSerialised.forEach((signedIntensity) => {
         signedIntensityFor30Days.push(new SignedIntensityFactor({
@@ -209,11 +182,9 @@ if (REGENERATE_INTENSITY) {
         }))
     })
 }
-if (DEBUG) {
-    logData.push({ src: 'prover_total_emissions', data: 'Number of carbon intensity factors signed', value: signedIntensityFor30Days.length, datatype: 'number' })
-}
 
 let measuredPeriodFromTimestamps: Field[] = []
+debugLog(`Prover_total_emissions, Number of carbon intensity factors signed, ${signedIntensityFor30Days.length}\n`);
 signedIntensityFor30Days.forEach((intensityObj) => {
     measuredPeriodFromTimestamps.push(intensityObj.timeFrom);
 });
@@ -224,10 +195,8 @@ const signedMeterReadingsFor30Days: SignedMeterReading[] = await smartMeterDataO
     measuredPeriodFromTimestamps,
     signedIntensityFor30Days[signedIntensityFor30Days.length - 1].timeTo
 );
-logData.push({ src: 'prover_total_emissions', data: 'get 30 days signed meter readings - time taken', value: (performance.now() - signMeterReadingsTimeStart), datatype: 'ms' })
-if (DEBUG) {
-    logData.push({ src: 'prover_total_emissions', data: 'Number of meter readings signed', value: signedMeterReadingsFor30Days.length, datatype: 'number' })
-}
+log(`Prover_total_emissions, sign_30_days_meter_readings, time, ${performance.now() - signMeterReadingsTimeStart}\n`);
+debugLog(`Prover_total_emissions, Number of meter readings signed, ${signedMeterReadingsFor30Days.length}\n`);
 
 let meterReadingsJson = [];
 signedMeterReadingsFor30Days.forEach((reading) => {
@@ -242,7 +211,7 @@ signedMeterReadingsFor30Days.forEach((reading) => {
 fsAsync.writeFile(
     "./generated_meter_readings/meter_readings.json", JSON.stringify(meterReadingsJson)
 ).catch(err => {
-    logData.push({ src: 'prover_total_emissions', data: 'Error writing to ./generated_meter_readings/meter_readings.json', value: err, datatype: 'text' })
+    log(`ERROR, Prover_total_emissions, Error writing to ./generated_meter_readings/meter_readings.json: ${err}\n`);
 });
 
 // For sanity checks
@@ -262,18 +231,14 @@ signedIntensityFor30Days.forEach((intensity, index) => {
     const totalEmission = intensity.intensity.mul(actualReading);
     knownTotalEmissions = knownTotalEmissions.add(totalEmission);
 })
-if (DEBUG) {
-    logData.push({ src: 'prover_total_emissions', data: 'The generated total emissions', value: knownTotalEmissions.toString(), datatype: 'text' })
-}
+debugLog(`Prover_total_emissions, Known total emissions, ${knownTotalEmissions.toString()}\n`);
 
 /*******************************/
 /* RUN TOTAL EMISSIONS CIRCUIT */
 /*******************************/
 const totalEmissionsTimeStart = performance.now();
 await generateTotalEmissionsProof(signedMeterReadingsFor30Days.length);
-logData.push({ src: 'prover_total_emissions', data: 'generate total emissions proof - time taken', value: (performance.now() - totalEmissionsTimeStart), datatype: 'ms' })
+log(`Prover_total_emissions, total_emissions_overall, time, ${performance.now() - totalEmissionsTimeStart}\n`);
 
-logData.push({ src: 'prover_total_emissions', data: 'prover overall - time taken', value: (performance.now() - proverTotalEmissionsTimeStart), datatype: 'ms' })
-logData.push({ src: 'prover_total_emissions', data: 'process - cpuUsage', value: (process.cpuUsage().user), datatype: 'us' })
-logData.push({ src: 'prover_total_emissions', data: 'process - memUsage', value: process.memoryUsage().rss, datatype: 'bytes' })
-csvWriter.writeRecords(logData).then(() => console.log('prover_total_emissions logs-writing to file completed'));
+log(`Prover_total_emissions, Ends, time, ${performance.now() - proverTotalEmissionsTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
+logStreamStop(logFile);
