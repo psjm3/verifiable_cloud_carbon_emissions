@@ -35,8 +35,7 @@ async function generateTotalEmissionsProof(numOfIntensities: number) {
     const baseTotalEmissionsTimeStart = performance.now();
     const baseProofsRunner = promisify(exec);
     const numCPUs = os.availableParallelism();
-    // let numOfWorkers = (numOfIntensities / BATCH_NUM_OF_INTENSITY) > numCPUs ? numCPUs : (numOfIntensities / BATCH_NUM_OF_INTENSITY);
-    let numOfWorkers = 10;
+    let numOfWorkers = (numOfIntensities / BATCH_NUM_OF_INTENSITY) > numCPUs ? numCPUs : (numOfIntensities / BATCH_NUM_OF_INTENSITY);
     for (let i = 0; i < numOfIntensities - 1; i += (BATCH_NUM_OF_INTENSITY * numOfWorkers)) {
         log(`Prover_total_emissions, base_proof, numOfIntensities, ${numOfIntensities}, iteration, ${i}, numOfWorkers, ${numOfWorkers}\n`);
 

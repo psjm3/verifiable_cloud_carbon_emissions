@@ -12,8 +12,7 @@ export async function generateCustomerSharesBaseProofs() {
     const baseProofsRunner = promisify(exec);
 
     const numCPUs = os.availableParallelism();
-    // let numOfWorkers = (TREE_NUM_OF_LEAFS / BATCH_NUM_OF_CUSTOMERS) > numCPUs ? numCPUs : (TREE_NUM_OF_LEAFS / BATCH_NUM_OF_CUSTOMERS);
-    let numOfWorkers = 10;
+    let numOfWorkers = (TREE_NUM_OF_LEAFS / BATCH_NUM_OF_CUSTOMERS) > numCPUs ? numCPUs : (TREE_NUM_OF_LEAFS / BATCH_NUM_OF_CUSTOMERS);
     for (let i = 0; i < TREE_NUM_OF_LEAFS; i += (BATCH_NUM_OF_CUSTOMERS * numOfWorkers)) {
         async function baseProofsRunnerExec() {
             const { stdout, stderr } = await baseProofsRunner('tsx ./src/proof_workers/proof_workers_customer_shares_base.ts ' + i + ' ' + numOfWorkers);

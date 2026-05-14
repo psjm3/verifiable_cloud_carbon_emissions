@@ -13,8 +13,7 @@ export async function generateCustomerSharesRecProofs() {
     const recProofsRunner = promisify(exec);
 
     const numCPUs = os.availableParallelism();
-    // let numOfWorkers = (numOfProofs / 2) > numCPUs ? numCPUs : (numOfProofs / 2);
-    let numOfWorkers = 10;
+    let numOfWorkers = (numOfProofs / 2) > numCPUs ? numCPUs : (numOfProofs / 2);
     while (subtreeRootLevel < (TREE_HEIGHT - 1)) {
         for (let i = 0; i < numOfProofs; i += (2 * numOfWorkers)) {
             async function recProofsRunnerExec() {
