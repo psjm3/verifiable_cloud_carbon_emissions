@@ -56,7 +56,7 @@ if (cluster.isPrimary) {
     const recordsInSubTree: Customer[] = customerRecords.slice(batchIdx, batchIdx + BATCH_NUM_OF_CUSTOMERS);
     const subTree: MerkleTreeWithSums = customerDataObj.generateBatchedSubTree(recordsInSubTree);
     
-    debugLog(`Proof_workers_customer_shares_base, worker ${process.pid} started with batchIdx ${batchIdx}\n`);
+    log(`Proof_workers_customer_shares_base, worker ${process.pid} started with batchIdx ${batchIdx}\n`);
 
     /***** Customer Shares Base (Leaf Nodes) Proofs *****/
     const compilationTimeStart = performance.now();

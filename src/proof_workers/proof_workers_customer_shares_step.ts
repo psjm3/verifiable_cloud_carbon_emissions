@@ -45,6 +45,8 @@ if (cluster.isPrimary) {
     log(`Proof_workers_customer_shares_step, primary_process_${process.pid}_is_running...\n`);
 
     for (let i = 0; i < numOfWorkers; i++) {
+        log(`Proof_workers_customer_shares_step, primary_process, startNodeIndex, ${startNodeIndex}, numOfProofs, ${numOfProofs}, numOfWorkers, ${numOfWorkers}\n`)
+
         if (startNodeIndex >= numOfProofs) {
             break;
         }
@@ -65,7 +67,7 @@ if (cluster.isPrimary) {
     const proofWorkersTimeStart = performance.now();
     let inputNodeIndex = parseInt(process.env.startNodeIndex)
     
-    debugLog(`Proof_workers_customer_shares_step, worker ${process.pid} started with level ${parseInt(process.env.subtreeRootLevel)} and inputNodeIndex ${inputNodeIndex}\n`);
+    log(`Proof_workers_customer_shares_step, worker ${process.pid} started with level ${parseInt(process.env.subtreeRootLevel)} and inputNodeIndex ${inputNodeIndex}\n`);
 
     /***** Customer Shares Base (Leaf Nodes) Proofs *****/
     const compilationTimeStart = performance.now();
