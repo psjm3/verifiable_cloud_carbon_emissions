@@ -2,7 +2,7 @@ import cluster from "cluster";
 import fs from 'fs';
 import fsAsync from 'fs/promises';
 
-import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums } from "../types/merkle_tree.js";
+import { BATCH_NUM_OF_CUSTOMERS, MerkleTreeWithSums, TREE_NUM_OF_LEAFS } from "../types/merkle_tree.js";
 import { verify } from "o1js";
 import { customerSharesCircuit } from "../zkPrograms/zkprogram_customer_shares.js";
 import { CustomerData } from "../data/data_customers.js";
@@ -33,6 +33,9 @@ if (cluster.isPrimary) {
     log(`Proof_workers_customer_shares_base, primary_process_${process.pid}_is_running...\n`);
 
     for (let i = 0; i < numOfWorkers; i++) {
+        if (startIdx >= (TREE_NUM_OF_LEAFS-1)) {
+            break;
+        }
         cluster.fork({ "startIdx": startIdx });
         startIdx = startIdx + BATCH_NUM_OF_CUSTOMERS;
     }

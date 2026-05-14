@@ -13,8 +13,8 @@ export async function generateCustomerSharesRecProofs() {
     const recProofsRunner = promisify(exec);
 
     const numCPUs = os.availableParallelism();
-    let numOfWorkers = (numOfProofs / 2) > numCPUs ? numCPUs : (numOfProofs / 2);
-
+    // let numOfWorkers = (numOfProofs / 2) > numCPUs ? numCPUs : (numOfProofs / 2);
+    let numOfWorkers = 10;
     while (subtreeRootLevel < (TREE_HEIGHT - 1)) {
         for (let i = 0; i < numOfProofs; i += (2 * numOfWorkers)) {
             async function recProofsRunnerExec() {
@@ -22,6 +22,7 @@ export async function generateCustomerSharesRecProofs() {
                     'tsx ./src/proof_workers/proof_workers_customer_shares_step.ts ' +
                     numOfWorkers + ' ' +
                     i + ' ' +
+                    numOfProofs + ' ' +
                     subtreeRootLevel
                 );
                 if (stdout != "") {
@@ -31,13 +32,13 @@ export async function generateCustomerSharesRecProofs() {
                     log(`${stderr}\n`);
                 }
             }
-            const baseProofRunnerTimeStart = performance.now();
+            const recProofRunnerTimeStart = performance.now();
             await recProofsRunnerExec();
-            log(`Prover_customer_shares_step, step_proof_runner_one_batch, time, ${performance.now() - baseProofRunnerTimeStart}, iteration, ${i}, subtreeRootLevel: ${subtreeRootLevel}, num_of_workers, ${numOfWorkers}, num_of_proofs, ${numOfProofs}\n`);
+            log(`Prover_customer_shares_step, step_proof_runner_one_batch, time, ${performance.now() - recProofRunnerTimeStart}, iteration, ${i}, subtreeRootLevel: ${subtreeRootLevel}, num_of_workers, ${numOfWorkers}, num_of_proofs, ${numOfProofs}\n`);
         }
         numOfProofs = numOfProofs / 2;
         subtreeRootLevel = subtreeRootLevel + 1;
-        numOfWorkers = (numOfProofs / 2) > numCPUs ? numCPUs : (numOfProofs / 2);
+        // numOfWorkers = (numOfProofs / 2) > numCPUs ? numCPUs : (numOfProofs / 2);
     }
 
 }

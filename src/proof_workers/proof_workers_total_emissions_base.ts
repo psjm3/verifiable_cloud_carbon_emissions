@@ -17,9 +17,9 @@ if (!fs.existsSync(path)) {
         process.exit(1);
     });
 }
-
-let startIdx = parseInt(process.argv[2]);
-let numOfWorkers = parseInt(process.argv[3]);
+let numOfIntensities = parseInt(process.argv[2]);
+let startIdx = parseInt(process.argv[3]);
+let numOfWorkers = parseInt(process.argv[4]);
 
 const logFile = path + '/proof_workers_total_emissions_base.out';
 logStreamStart(logFile);
@@ -38,6 +38,9 @@ if (cluster.isPrimary) {
     log(`Proof_workers_total_emissions_base, primary_process_${process.pid}_is_running...\n`);
 
     for (let i = 0; i < numOfWorkers; i++) {
+        if (startIdx >= (numOfIntensities-1)) {
+            break;
+        }
         cluster.fork({ "startIdx": startIdx });
         startIdx = startIdx + BATCH_NUM_OF_INTENSITY;
     }
@@ -56,7 +59,7 @@ if (cluster.isPrimary) {
 
     let batchIdx = parseInt(process.env.startIdx);
 
-    debugLog(`Proof_workers_total_emissions_base, worker ${process.pid} started with batchIdx ${batchIdx}\n`);
+    log(`Proof_workers_total_emissions_base, worker ${process.pid} started with batchIdx ${batchIdx}\n`);
 
     const compilationTimeStart = performance.now();
     const totalEmissionsVk = (await totalEmissionsCircuit.compile()).verificationKey;

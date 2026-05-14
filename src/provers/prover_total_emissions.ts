@@ -35,10 +35,13 @@ async function generateTotalEmissionsProof(numOfIntensities: number) {
     const baseTotalEmissionsTimeStart = performance.now();
     const baseProofsRunner = promisify(exec);
     const numCPUs = os.availableParallelism();
-    let numOfWorkers = (numOfIntensities / BATCH_NUM_OF_INTENSITY) > numCPUs ? numCPUs : (numOfIntensities / BATCH_NUM_OF_INTENSITY);
+    // let numOfWorkers = (numOfIntensities / BATCH_NUM_OF_INTENSITY) > numCPUs ? numCPUs : (numOfIntensities / BATCH_NUM_OF_INTENSITY);
+    let numOfWorkers = 10;
     for (let i = 0; i < numOfIntensities - 1; i += (BATCH_NUM_OF_INTENSITY * numOfWorkers)) {
+        log(`Prover_total_emissions, base_proof, numOfIntensities, ${numOfIntensities}, iteration, ${i}, numOfWorkers, ${numOfWorkers}\n`);
+
         async function baseProofsRunnerExec() {
-            const { stdout, stderr } = await baseProofsRunner('tsx ./src/proof_workers/proof_workers_total_emissions_base.ts ' + i + ' ' + numOfWorkers);
+            const { stdout, stderr } = await baseProofsRunner('tsx ./src/proof_workers/proof_workers_total_emissions_base.ts ' + ' ' + numOfIntensities + ' ' + i + ' ' + numOfWorkers);
             if (stdout != "") {
                 log(`${stdout}\n`);
             }
@@ -51,7 +54,6 @@ async function generateTotalEmissionsProof(numOfIntensities: number) {
         log(`Prover_total_emissions, base_proof_runner_one_batch, time, ${performance.now() - runTotalEmissionsBaseTimeStart}, iteration, ${i}, num_of_workers, ${numOfWorkers}\n`);
     }
     log(`Prover_total_emissions, total_emissions_base_overall, time, ${performance.now() - baseTotalEmissionsTimeStart}\n`);
-    
 
     // TODO: Handle the case when it  is not a complete tree
     const stepTotalEmissionsTimeStart = performance.now();
@@ -59,27 +61,28 @@ async function generateTotalEmissionsProof(numOfIntensities: number) {
     let numOfSteps = (numOfIntensities / BATCH_NUM_OF_INTENSITY);
     const levelsOfSums = Math.ceil(Math.log2(numOfSteps));
 
-    numOfWorkers = numOfWorkers / 2;
-    for (let level = 0; level < levelsOfSums; level++) {
-        debugLog(`Prover_total_emissions, step_proof, level, ${level},  numOfWorkers, ${numOfWorkers}`);
-        async function stepProofsRunnerExec() {
-            const { stdout, stderr } = await stepProofsRunner(
-                'tsx ./src/proof_workers/proof_workers_total_emissions_step.ts ' +
-                numOfWorkers + ' ' +
-                0 + ' ' +
-                level
-            );
-            if (stdout != "") {
-                log(`${stdout}\n`);
+    for (let level = 0; level < levelsOfSums-1; level++) {
+        for (let i = 0; i < numOfIntensities - 1; i += (BATCH_NUM_OF_INTENSITY * (2**(level+1)) * numOfWorkers)) {
+            log(`Prover_total_emissions, step_proof, level, ${level}, startIdx, ${i}\n`);
+            async function stepProofsRunnerExec() {
+                const { stdout, stderr } = await stepProofsRunner(
+                    'tsx ./src/proof_workers/proof_workers_total_emissions_step.ts ' +
+                    numOfIntensities + ' ' + 
+                    numOfWorkers + ' ' + 
+                    i + ' ' +
+                    level
+                );
+                if (stdout != "") {
+                    log(`${stdout}\n`);
+                }
+                if (stderr != "") {
+                    log(`${stderr}\n`);
+                }
             }
-            if (stderr != "") {
-                log(`${stderr}\n`);
-            }
+            const runTotalEmissionsStepTimeStart = performance.now();
+            await stepProofsRunnerExec();
+            log(`Prover_total_emissions, step_proof_runner_one_batch, time, ${performance.now() - runTotalEmissionsStepTimeStart}\n`);
         }
-        const runTotalEmissionsStepTimeStart = performance.now();
-        await stepProofsRunnerExec();
-        log(`Prover_total_emissions, step_proof_runner_one_batch, time, ${performance.now() - runTotalEmissionsStepTimeStart}, level, ${level}, num_of_workers, ${numOfWorkers}\n`);
-        numOfWorkers = numOfWorkers / 2;
     }
     log(`Prover_total_emissions, total_emissions_step_overall, time, ${performance.now() - stepTotalEmissionsTimeStart}\n`);
 }

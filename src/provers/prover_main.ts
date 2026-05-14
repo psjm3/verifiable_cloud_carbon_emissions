@@ -107,7 +107,7 @@ log(`Prover_main, Constraints_of_per_customer_emissions, how_many, ${perCustomer
 const threeProofsTimeStart = performance.now();
 log(`Prover_main, Running_total_emissions_proof...\n`)
 const totalEmissionsTimeStart = performance.now();
-await totalEmissionsProofsRunner();
+// await totalEmissionsProofsRunner();
 log(`Prover_main, Total_emissions_proof, time, ${performance.now() - totalEmissionsTimeStart}\n`);
 
 log(`Prover_main, Running_customer_shares_proof...\n`)

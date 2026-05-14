@@ -24,18 +24,19 @@ if (!fs.existsSync(path)) {
     });
 }
 
-// For 1st rec proof, number of proofs input = number of base proofs, number of proofs output = number of proofs input / BATCH_NUM_OF_CUSTOMERS
+// For 1st rec proof, number of proofs input = number of base proofs, number of proofs output = number of proofs input / BATCH_NUM_OF_INTENSITY
 
-// number of worker is divided by BATCH_NUM_OF_CUSTOMERS every time subtree root level increases, 
-// e.g. first batch the number or workers are (TREE_NUM_OF_LEAFS/BATCH_NUM_OF_CUSTOMERS),
-// at the next level up, the number of workers becomes (TREE_NUM_OF_LEAFS/(BATCH_NUM_OF_CUSTOMERS*BATCH_NUM_OF_CUSTOMERS))
+// number of worker is divided by BATCH_NUM_OF_INTENSITY every time subtree root level increases, 
+// e.g. first batch the number or workers are (numOfIntensities/BATCH_NUM_OF_INTENSITY),
+// at the next level up, the number of workers becomes (numOfIntensities/(BATCH_NUM_OF_INTENSITY*BATCH_NUM_OF_INTENSITY))
 // ***** 
 // Therefore, each time before this cluster is executed, numOfInputProofs needs to be updated to 
 // half of the number of the previous numOfInputProofs
 // *****
-const numOfWorkers = parseInt(process.argv[2]);
-let startNodeIndex = parseInt(process.argv[3]);
-const subtreeRootLevel = parseInt(process.argv[4]);
+const numOfIntensities = parseInt(process.argv[2]);
+const numOfWorkers = parseInt(process.argv[3]);
+let startNodeIndex = parseInt(process.argv[4]);
+const subtreeRootLevel = parseInt(process.argv[5]);
 const logFile = path + '/proof_workers_total_emissions_step.out';
 logStreamStart(logFile);
 
@@ -45,8 +46,12 @@ if (cluster.isPrimary) {
     const nextLevel = subtreeRootLevel + 1;
     const nextStartIndex = 2**nextLevel;
     for (let i = 0; i < numOfWorkers; i++) {
-        startNodeIndex =  BATCH_NUM_OF_INTENSITY*i*nextStartIndex;
+        log(`Proof_workers_total_emissions step, primary_process, startNodeIndex, ${startNodeIndex}, numOfIntensities, ${numOfIntensities}, nextLevel, ${nextLevel}, StartIndex, ${nextStartIndex}\n`)
+        if (startNodeIndex >= (numOfIntensities-1)) {
+            break;
+        }
         cluster.fork({ "subtreeRootLevel": subtreeRootLevel, "startNodeIndex": startNodeIndex });
+        startNodeIndex = startNodeIndex + BATCH_NUM_OF_INTENSITY*nextStartIndex;
     }
 
     cluster.on('exit', (worker, code, signal) => {
@@ -62,7 +67,7 @@ if (cluster.isPrimary) {
     const proofWorkersTimeStart = performance.now();
 
     let inputNodeIndex = parseInt(process.env.startNodeIndex)
-    debugLog(`Proof_workers_total_emissions_step, worker ${process.pid} started with level ${parseInt(process.env.subtreeRootLevel)} and inputNodeIndex ${inputNodeIndex}\n`);
+    log(`Proof_workers_total_emissions_step, worker ${process.pid} started with level ${parseInt(process.env.subtreeRootLevel)} and inputNodeIndex ${inputNodeIndex}\n`);
 
     const compilationTimeStart = performance.now();
     const totalEmissionsVk = (await totalEmissionsCircuit.compile()).verificationKey;

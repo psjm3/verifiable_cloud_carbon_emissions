@@ -2,7 +2,7 @@ import cluster from "cluster";
 import fs from 'fs';
 import fsAsync from 'fs/promises';
 
-import { NodeContent } from "../types/merkle_tree.js";
+import { NodeContent, TREE_NUM_OF_LEAFS } from "../types/merkle_tree.js";
 import { verify } from "o1js";
 import { customerSharesCircuit } from "../zkPrograms/zkprogram_customer_shares.js";
 import { debugLog, log, logStreamStart, logStreamStop } from "../utils/util.js";
@@ -35,7 +35,8 @@ if (!fs.existsSync(path)) {
 // *****
 const numOfWorkers = parseInt(process.argv[2]);
 let startNodeIndex = parseInt(process.argv[3]);
-const subtreeRootLevel = parseInt(process.argv[4]);
+let numOfProofs = parseInt(process.argv[4]);
+const subtreeRootLevel = parseInt(process.argv[5]);
 
 const logFile = path + '/proof_workers_customer_shares_step.out';
 logStreamStart(logFile);
@@ -44,6 +45,9 @@ if (cluster.isPrimary) {
     log(`Proof_workers_customer_shares_step, primary_process_${process.pid}_is_running...\n`);
 
     for (let i = 0; i < numOfWorkers; i++) {
+        if (startNodeIndex >= numOfProofs) {
+            break;
+        }
         cluster.fork({ "subtreeRootLevel": subtreeRootLevel, "startNodeIndex": startNodeIndex });
         startNodeIndex = startNodeIndex + 2;
     }
