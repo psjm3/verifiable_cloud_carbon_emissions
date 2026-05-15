@@ -115,3 +115,4 @@ for (let i = 0; i < NUM_OF_VERIFIER; i++) {
 }
 log(`Verifier_main, Ends, time, ${performance.now() - verifierTimeStart}, cpuUsage, ${process.cpuUsage().user}, memUsage, ${process.memoryUsage().rss}\n`);
 logStreamStop(logFile);
+console.log("Verification completed, please check generated_logs/verifier_main.ts for the results.")
